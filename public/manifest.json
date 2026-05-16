@@ -1,0 +1,22 @@
+{
+  "name": "Live Study Clock",
+  "short_name": "Study Clock",
+  "description": "Focus, Relax, Study - Live Study Clock",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#080d08",
+  "theme_color": "#080d08",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

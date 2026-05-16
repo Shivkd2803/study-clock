@@ -1,0 +1,5 @@
+node_modules
+dist
+dist-electron
+public/videos
+public/audio

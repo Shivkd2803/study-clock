@@ -1,0 +1,50 @@
+{
+  "name": "live-study-clock",
+  "private": true,
+  "version": "1.0.0",
+  "main": "electron/main.js",
+  "description": "Live Study Clock - Focus, Relax, Study",
+  "author": "Live Study Clock",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build && electron-builder",
+    "start": "electron .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "framer-motion": "^11.0.0",
+    "howler": "^2.2.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-icons": "^5.2.1",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "concurrently": "^9.0.1",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "vite": "^5.3.1",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.livestudyclock.app",
+    "productName": "Live Study Clock",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "public/**/*"
+    ],
+    "win": {
+      "target": "portable"
+    }
+  }
+}

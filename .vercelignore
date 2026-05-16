@@ -1,0 +1,5 @@
+node_modules
+dist/audio
+dist/videos
+public/videos
+public/audio
