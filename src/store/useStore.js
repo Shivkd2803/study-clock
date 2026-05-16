@@ -8,10 +8,10 @@ export const useStore = create((set, get) => ({
   running: false,
 
   backgrounds: [
-    { name: "Rainy Window",    video: "/videos/rainy.mp4",      audio: "/audio/rain.mp3",       thumbnail: "/thumbnails/rainy.png"    },
-    { name: "Underwater Calm", video: "/videos/underwater.mp4", audio: "/audio/underwater.mp3", thumbnail: "/thumbnails/underwater.png"},
+    { name: "Rainy Window",    video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763333/rainy_sffag8.mp4",      audio: "/audio/rain.mp3",       thumbnail: "/thumbnails/rainy.png"    },
+    { name: "Underwater Calm", video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763351/underwater_cm7ts6.mp4", audio: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763421/underwater_m0fnhr.mp3", thumbnail: "/thumbnails/underwater.png"},
     { name: "Cozy Coffee Shop",video: "/videos/coffee.mp4",     audio: "/audio/coffee.mp3",     thumbnail: "/thumbnails/coffee.jpg"   },
-    { name: "Forest Rain",     video: "/videos/forest.mp4",     audio: "/audio/forest.mp3",     thumbnail: "/thumbnails/rainy.png"    },
+    { name: "Forest Rain",     video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763338/forest_gzqbs0.mp4",     audio: "/audio/forest.mp3",     thumbnail: "/thumbnails/rainy.png"    },
     { name: "Night Campfire",  video: "/videos/campfire.mp4",   audio: "/audio/campfire.mp3",   thumbnail: "/thumbnails/campfire.jpg" },
   ],
 
