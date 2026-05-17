@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Live Study Clock](public/logo.png)
+<img src="public/logo.png" alt="Live Study Clock" width="80"/>
 
 **A beautiful, immersive study and focus app with live ambient backgrounds, timers, and relaxing sounds.**
 
@@ -41,19 +41,19 @@
 ## 📸 Screenshots
 
 ### 🖥️ Desktop
-![Desktop](screenshots/desktop.png)
+<img src="screenshots/desktop.png" alt="Desktop" width="700"/>
 
 ### 📱 Phone
-![Phone](screenshots/phone.jpg)
+<img src="screenshots/phone.jpg" alt="Phone" width="280"/>
 
 ### 📟 iPad Portrait
-![iPad Portrait](screenshots/ipad-portrait.jpg)
+<img src="screenshots/ipad-portrait.jpg" alt="iPad Portrait" width="450"/>
 
 ### 📟 iPad Landscape
-![iPad Landscape](screenshots/ipad-landscape.jpg)
+<img src="screenshots/ipad-landscape.jpg" alt="iPad Landscape" width="600"/>
 
 ### 🔲 Fullscreen Mode
-![Fullscreen](screenshots/fullscreen.jpg)
+<img src="screenshots/fullscreen.jpg" alt="Fullscreen" width="600"/>
 
 ---
 
