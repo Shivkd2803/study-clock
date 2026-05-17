@@ -40,9 +40,20 @@
 
 ## 📸 Screenshots
 
-| Phone | Tablet | Desktop |
-|-------|--------|---------|
-| Fullscreen clock with ambient background | Timer with immersive background | Full layout with ambience selector |
+### 🖥️ Desktop
+![Desktop](screenshots/desktop.png)
+
+### 📱 Phone
+![Phone](screenshots/phone.jpg)
+
+### 📟 iPad Portrait
+![iPad Portrait](screenshots/ipad-portrait.jpg)
+
+### 📟 iPad Landscape
+![iPad Landscape](screenshots/ipad-landscape.jpg)
+
+### 🔲 Fullscreen Mode
+![Fullscreen](screenshots/fullscreen.jpg)
 
 ---
 
