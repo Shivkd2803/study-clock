@@ -125,11 +125,11 @@ function ModePill({ sz = "md", onSetTime }) {
             else { setMode(key); }
           }}
           className={`flex-1 flex flex-col items-center gap-1.5 ${pyCls} ${rCls} transition-all ${
-            mode === key ? "bg-[#f0ede8]/20 text-[#f0ede8] border border-[#f0ede8]/30" : "text-white/65 hover:text-white"
+            mode === key ? "bg-[#4ade80]/20 text-[#4ade80] border border-[#4ade80]/30" : "text-white/65 hover:text-white"
           }`}>
           {Ico(iconSz)}
           <span className={`${txtCls} font-medium`}>{label}</span>
-          {mode === key && <div className="w-5 h-0.5 bg-[#f0ede8] rounded-full"/>}
+          {mode === key && <div className="w-5 h-0.5 bg-[#4ade80] rounded-full"/>}
         </button>
       ))}
     </div>
@@ -189,7 +189,7 @@ function SetTimeSheet({ onClose }) {
               onBlur={() => {}}
               placeholder="00"
               maxLength={2}
-              className="w-24 text-center text-5xl font-bold text-white bg-white/5 rounded-2xl py-3 border border-white/10 focus:outline-none focus:border-[#f0ede8]/60 placeholder-white/30"
+              className="w-24 text-center text-5xl font-bold text-white bg-white/5 rounded-2xl py-3 border border-white/10 focus:outline-none focus:border-[#4ade80]/60 placeholder-white/30"
             />
           </div>
 
@@ -208,18 +208,18 @@ function SetTimeSheet({ onClose }) {
               onBlur={() => {}}
               placeholder="00"
               maxLength={2}
-              className="w-24 text-center text-5xl font-bold text-white bg-white/5 rounded-2xl py-3 border border-white/10 focus:outline-none focus:border-[#f0ede8]/60 placeholder-white/30"
+              className="w-24 text-center text-5xl font-bold text-white bg-white/5 rounded-2xl py-3 border border-white/10 focus:outline-none focus:border-[#4ade80]/60 placeholder-white/30"
             />
           </div>
         </div>
 
         {/* Preview of what will be set */}
         <p className="text-white/40 text-sm">
-          Timer will be set to <span className="text-[#f0ede8] font-semibold">{displayH}:{displayM}</span>
+          Timer will be set to <span className="text-[#4ade80] font-semibold">{displayH}:{displayM}</span>
         </p>
 
         <div className="flex gap-3 w-full">
-          <button onClick={go} className="flex-1 py-4 rounded-full bg-[#f0ede8] text-black text-lg font-bold shadow-[0_0_30px_rgba(240,237,232,0.20)]">START</button>
+          <button onClick={go} className="flex-1 py-4 rounded-full bg-[#4ade80] text-black text-lg font-bold shadow-[0_0_30px_rgba(74,222,128,0.3)]">START</button>
           <button onClick={onClose} className="flex-1 py-4 rounded-full bg-white/10 text-white text-lg border border-white/10">CANCEL</button>
         </div>
       </motion.div>
@@ -302,20 +302,20 @@ function AmbienceGrid({ cardH=100, count=6 }) {
     <div className="grid grid-cols-2 gap-2.5">
       {/* No Background tile */}
       <motion.div whileTap={{scale:0.95}} onClick={()=>setBackground(-1)}
-        className={`relative rounded-[16px] overflow-hidden cursor-pointer border-2 transition-all flex flex-col items-center justify-center gap-1.5 ${current===-1?"border-[#f0ede8] shadow-[0_0_14px_rgba(240,237,232,0.35)]":"border-white/15"}`}
+        className={`relative rounded-[16px] overflow-hidden cursor-pointer border-2 transition-all flex flex-col items-center justify-center gap-1.5 ${current===-1?"border-[#4ade80] shadow-[0_0_14px_rgba(74,222,128,0.5)]":"border-white/15"}`}
         style={{height:cardH, background:"rgba(0,0,0,0.7)"}}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={current===-1?"#f0ede8":"rgba(255,255,255,0.4)"} strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-        <p className="text-[11px] font-bold" style={{color:current===-1?"#f0ede8":"rgba(255,255,255,0.5)"}}>No Background</p>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={current===-1?"#4ade80":"rgba(255,255,255,0.4)"} strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        <p className="text-[11px] font-bold" style={{color:current===-1?"#4ade80":"rgba(255,255,255,0.5)"}}>No Background</p>
       </motion.div>
       {all.map((bg,i)=>{
         const idx=bg.storeIndex??null;
         return (
           <motion.div key={i} whileTap={{scale:0.95}} onClick={()=>idx!=null&&setBackground(idx)}
-            className={`relative rounded-[16px] overflow-hidden cursor-pointer border-2 transition-all ${current===idx&&idx!=null?"border-[#f0ede8] shadow-[0_0_14px_rgba(240,237,232,0.35)]":"border-transparent"}`}
+            className={`relative rounded-[16px] overflow-hidden cursor-pointer border-2 transition-all ${current===idx&&idx!=null?"border-[#4ade80] shadow-[0_0_14px_rgba(74,222,128,0.5)]":"border-transparent"}`}
             style={{height:cardH}}>
             <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover"/>
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"/>
-            <div className="absolute top-2 right-2 flex items-center gap-1 bg-[#f0ede8]/90 px-1.5 py-0.5 rounded-full">
+            <div className="absolute top-2 right-2 flex items-center gap-1 bg-[#4ade80]/90 px-1.5 py-0.5 rounded-full">
               <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>
               <span className="text-[8px] text-black font-bold">LIVE</span>
             </div>
@@ -337,27 +337,27 @@ function AmbienceRow({ cardW=150, cardH=105, count=8, onViewAll, labelSize="sm" 
     <div>
       <div className={`flex items-center justify-between mb-3 ${labelSize==="lg"?"px-0":""}`}>
         <span className={`text-white font-bold tracking-widest uppercase ${labelSize==="lg"?"text-sm":"text-xs"}`}>Immersive Ambiences</span>
-        <button onClick={onViewAll} className={`text-[#f0ede8] font-semibold ${labelSize==="lg"?"text-sm":"text-xs"}`}>View All</button>
+        <button onClick={onViewAll} className={`text-[#4ade80] font-semibold ${labelSize==="lg"?"text-sm":"text-xs"}`}>View All</button>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1" style={{scrollbarWidth:"none"}}>
         {/* No Background tile */}
         <motion.div whileTap={{scale:0.95}} whileHover={{scale:1.02}}
           onClick={()=>setBackground(-1)}
-          className={`relative flex-shrink-0 rounded-[18px] overflow-hidden cursor-pointer border-2 transition-all flex flex-col items-center justify-center gap-2 ${current===-1?"border-[#f0ede8] shadow-[0_0_18px_rgba(240,237,232,0.35)]":"border-white/10 hover:border-white/20"}`}
+          className={`relative flex-shrink-0 rounded-[18px] overflow-hidden cursor-pointer border-2 transition-all flex flex-col items-center justify-center gap-2 ${current===-1?"border-[#4ade80] shadow-[0_0_18px_rgba(74,222,128,0.5)]":"border-white/10 hover:border-white/20"}`}
           style={{width:cardW,height:cardH,background:"rgba(0,0,0,0.6)"}}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={current===-1?"#f0ede8":"rgba(255,255,255,0.35)"} strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-          <p className="text-xs font-bold text-center px-2" style={{color:current===-1?"#f0ede8":"rgba(255,255,255,0.4)"}}>No Background</p>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={current===-1?"#4ade80":"rgba(255,255,255,0.35)"} strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          <p className="text-xs font-bold text-center px-2" style={{color:current===-1?"#4ade80":"rgba(255,255,255,0.4)"}}>No Background</p>
         </motion.div>
         {all.map((bg,i)=>{
           const idx=bg.storeIndex??null;
           return (
             <motion.div key={i} whileTap={{scale:0.95}} whileHover={{scale:1.02}}
               onClick={()=>idx!=null&&setBackground(idx)}
-              className={`relative flex-shrink-0 rounded-[18px] overflow-hidden cursor-pointer border-2 transition-all ${current===idx&&idx!=null?"border-[#f0ede8] shadow-[0_0_18px_rgba(240,237,232,0.35)]":"border-transparent hover:border-white/20"}`}
+              className={`relative flex-shrink-0 rounded-[18px] overflow-hidden cursor-pointer border-2 transition-all ${current===idx&&idx!=null?"border-[#4ade80] shadow-[0_0_18px_rgba(74,222,128,0.5)]":"border-transparent hover:border-white/20"}`}
               style={{width:cardW,height:cardH}}>
               <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover"/>
               <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent"/>
-              <div className="absolute top-2 right-2 flex items-center gap-1 bg-[#f0ede8]/90 px-1.5 py-0.5 rounded-full">
+              <div className="absolute top-2 right-2 flex items-center gap-1 bg-[#4ade80]/90 px-1.5 py-0.5 rounded-full">
                 <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>
                 <span className="text-[8px] text-black font-bold">LIVE</span>
               </div>
@@ -391,11 +391,11 @@ function ExploreModal({ onClose, desktop=false }) {
           className="w-[85vw] max-w-[1100px] max-h-[88vh] bg-[#0c130c]/98 backdrop-blur-2xl rounded-[36px] border border-white/10 flex flex-col overflow-hidden">
           <div className="flex items-start justify-between px-10 pt-9 pb-5 flex-shrink-0">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-[#f0ede8]/15 flex items-center justify-center">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f0ede8" strokeWidth="2.5"><path d="M17 8C8 10 5.9 16.17 3.82 21"/><path d="M9.1 10.1c1.9-3.1 5.9-6.1 11.9-8.1 0 6-2.9 10.9-8.9 13.9"/></svg>
+              <div className="w-10 h-10 rounded-xl bg-[#4ade80]/15 flex items-center justify-center">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5"><path d="M17 8C8 10 5.9 16.17 3.82 21"/><path d="M9.1 10.1c1.9-3.1 5.9-6.1 11.9-8.1 0 6-2.9 10.9-8.9 13.9"/></svg>
               </div>
               <div>
-                <h2 className="text-white text-3xl font-bold">Explore <span className="text-[#f0ede8]">Live</span> Backgrounds</h2>
+                <h2 className="text-white text-3xl font-bold">Explore <span className="text-[#4ade80]">Live</span> Backgrounds</h2>
                 <p className="text-white/40 text-sm mt-0.5">Discover the perfect atmosphere for your focus.</p>
               </div>
             </div>
@@ -404,8 +404,8 @@ function ExploreModal({ onClose, desktop=false }) {
             </button>
           </div>
           <div className="flex gap-3 px-10 mb-4 flex-shrink-0">
-            <div className="flex-1 flex items-center gap-3 bg-[#f0ede8]/5 rounded-2xl px-5 py-3.5 border border-[#f0ede8]/20">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f0ede8" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <div className="flex-1 flex items-center gap-3 bg-[#4ade80]/5 rounded-2xl px-5 py-3.5 border border-[#4ade80]/20">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search live backgrounds..." className="bg-transparent text-white flex-1 outline-none placeholder-white/30 text-sm"/>
             </div>
             <button className="px-5 rounded-2xl bg-white/5 border border-white/10 text-white/50 text-sm flex items-center gap-2">
@@ -418,7 +418,7 @@ function ExploreModal({ onClose, desktop=false }) {
           <div className="flex gap-2 px-10 mb-5 flex-wrap flex-shrink-0">
             {CATS.map(c=>(
               <button key={c} onClick={()=>setCat(c)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-all ${cat===c?"bg-[#f0ede8]/20 text-[#f0ede8] border-[#f0ede8]/40":"bg-white/5 text-white/50 border-white/10 hover:text-white/70"}`}>
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-all ${cat===c?"bg-[#4ade80]/20 text-[#4ade80] border-[#4ade80]/40":"bg-white/5 text-white/50 border-white/10 hover:text-white/70"}`}>
                 {CAT_ICONS[c]}{c}
               </button>
             ))}
@@ -427,10 +427,10 @@ function ExploreModal({ onClose, desktop=false }) {
             <div className="grid grid-cols-4 gap-4">
               {filtered.map((bg,i)=>(
                 <motion.div key={i} whileHover={{scale:1.03}} whileTap={{scale:0.97}} onClick={()=>setPreview(bg)}
-                  className="relative rounded-2xl overflow-hidden cursor-pointer border border-white/10 hover:border-[#f0ede8]/40 transition-all group" style={{height:170}}>
+                  className="relative rounded-2xl overflow-hidden cursor-pointer border border-white/10 hover:border-[#4ade80]/40 transition-all group" style={{height:170}}>
                   <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"/>
-                  <div className="absolute top-3 left-3 flex items-center gap-1 bg-[#f0ede8]/90 px-2 py-0.5 rounded-full">
+                  <div className="absolute top-3 left-3 flex items-center gap-1 bg-[#4ade80]/90 px-2 py-0.5 rounded-full">
                     <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/><span className="text-[9px] text-black font-bold">LIVE</span>
                   </div>
                   <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/40 flex items-center justify-center">
@@ -453,7 +453,7 @@ function ExploreModal({ onClose, desktop=false }) {
             <motion.div className="fixed inset-0 z-[1100] bg-black/80 backdrop-blur-xl flex items-center justify-center"
               initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
               <motion.div initial={{scale:0.9}} animate={{scale:1}} exit={{scale:0.9}}
-                className="relative w-[78vw] h-[78vh] rounded-[36px] overflow-hidden border border-[#f0ede8]/30">
+                className="relative w-[78vw] h-[78vh] rounded-[36px] overflow-hidden border border-[#4ade80]/30">
                 <video autoPlay loop muted playsInline controls={false} disablePictureInPicture className="absolute inset-0 w-full h-full object-cover">
                   <source src={preview.video} type="video/mp4"/>
                 </video>
@@ -463,7 +463,7 @@ function ExploreModal({ onClose, desktop=false }) {
                   <p className="text-white/60 text-xl mt-2">{preview.desc}</p>
                 </div>
                 <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 z-20">
-                  <button onClick={()=>{if(preview.storeIndex!=null)setBackground(preview.storeIndex);setPreview(null);onClose();}} className="px-10 py-4 rounded-full bg-[#f0ede8] text-black text-xl font-bold">APPLY</button>
+                  <button onClick={()=>{if(preview.storeIndex!=null)setBackground(preview.storeIndex);setPreview(null);onClose();}} className="px-10 py-4 rounded-full bg-[#4ade80] text-black text-xl font-bold">APPLY</button>
                   <button onClick={()=>setPreview(null)} className="px-10 py-4 rounded-full bg-white/10 text-white text-xl border border-white/20">CLOSE</button>
                 </div>
               </motion.div>
@@ -480,11 +480,11 @@ function ExploreModal({ onClose, desktop=false }) {
       initial={{x:"100%"}} animate={{x:0}} exit={{x:"100%"}} transition={{duration:0.28,ease:"easeOut"}}>
       <div className="flex items-start justify-between px-5 pt-10 pb-4 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#f0ede8]/15 flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f0ede8" strokeWidth="2.5"><path d="M17 8C8 10 5.9 16.17 3.82 21"/><path d="M9.1 10.1c1.9-3.1 5.9-6.1 11.9-8.1 0 6-2.9 10.9-8.9 13.9"/></svg>
+          <div className="w-9 h-9 rounded-xl bg-[#4ade80]/15 flex items-center justify-center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5"><path d="M17 8C8 10 5.9 16.17 3.82 21"/><path d="M9.1 10.1c1.9-3.1 5.9-6.1 11.9-8.1 0 6-2.9 10.9-8.9 13.9"/></svg>
           </div>
           <div>
-            <h1 className="text-white text-lg font-bold">Explore <span className="text-[#f0ede8]">Live</span> Backgrounds</h1>
+            <h1 className="text-white text-lg font-bold">Explore <span className="text-[#4ade80]">Live</span> Backgrounds</h1>
             <p className="text-white/40 text-xs">Discover the perfect atmosphere.</p>
           </div>
         </div>
@@ -493,8 +493,8 @@ function ExploreModal({ onClose, desktop=false }) {
         </button>
       </div>
       <div className="flex gap-2 mx-5 mb-3 flex-shrink-0">
-        <div className="flex-1 flex items-center gap-2 bg-[#f0ede8]/5 rounded-2xl px-4 py-3 border border-[#f0ede8]/20">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f0ede8" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <div className="flex-1 flex items-center gap-2 bg-[#4ade80]/5 rounded-2xl px-4 py-3 border border-[#4ade80]/20">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search live backgrounds..." className="bg-transparent text-white text-sm flex-1 outline-none placeholder-white/30"/>
         </div>
         <button className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-white/5 border border-white/10 text-white/50 text-xs font-medium">
@@ -504,7 +504,7 @@ function ExploreModal({ onClose, desktop=false }) {
       <div className="flex gap-2 px-5 mb-3 overflow-x-auto flex-shrink-0" style={{scrollbarWidth:"none"}}>
         {CATS.map(c=>(
           <button key={c} onClick={()=>setCat(c)}
-            className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${cat===c?"bg-[#f0ede8]/20 text-[#f0ede8] border-[#f0ede8]/40":"bg-white/5 text-white/50 border-white/10"}`}>
+            className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${cat===c?"bg-[#4ade80]/20 text-[#4ade80] border-[#4ade80]/40":"bg-white/5 text-white/50 border-white/10"}`}>
             {CAT_ICONS[c]}{c}
           </button>
         ))}
@@ -516,7 +516,7 @@ function ExploreModal({ onClose, desktop=false }) {
               className="relative rounded-2xl overflow-hidden cursor-pointer" style={{height:130}}>
               <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover"/>
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"/>
-              <div className="absolute top-2.5 right-2.5 flex items-center gap-1 bg-[#f0ede8]/90 px-1.5 py-0.5 rounded-full">
+              <div className="absolute top-2.5 right-2.5 flex items-center gap-1 bg-[#4ade80]/90 px-1.5 py-0.5 rounded-full">
                 <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/><span className="text-[7px] text-black font-bold">LIVE</span>
               </div>
               <div className="absolute bottom-2.5 left-3 right-8">
@@ -535,7 +535,7 @@ function ExploreModal({ onClose, desktop=false }) {
           <motion.div className="fixed inset-0 z-[1100] bg-black/80 backdrop-blur-xl flex items-center justify-center"
             initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
             <motion.div initial={{scale:0.9}} animate={{scale:1}} exit={{scale:0.9}}
-              className="relative w-[92vw] rounded-[28px] overflow-hidden border border-[#f0ede8]/30" style={{height:"58vh"}}>
+              className="relative w-[92vw] rounded-[28px] overflow-hidden border border-[#4ade80]/30" style={{height:"58vh"}}>
               <video autoPlay loop muted playsInline controls={false} className="absolute inset-0 w-full h-full object-cover">
                 <source src={preview.video} type="video/mp4"/>
               </video>
@@ -545,7 +545,7 @@ function ExploreModal({ onClose, desktop=false }) {
                 <p className="text-white/60 text-sm mt-1">{preview.desc}</p>
               </div>
               <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-3 z-20">
-                <button onClick={()=>{if(preview.storeIndex!=null)setBackground(preview.storeIndex);setPreview(null);onClose();}} className="px-7 py-3 rounded-full bg-[#f0ede8] text-black font-bold">APPLY</button>
+                <button onClick={()=>{if(preview.storeIndex!=null)setBackground(preview.storeIndex);setPreview(null);onClose();}} className="px-7 py-3 rounded-full bg-[#4ade80] text-black font-bold">APPLY</button>
                 <button onClick={()=>setPreview(null)} className="px-7 py-3 rounded-full bg-white/10 text-white border border-white/20">CLOSE</button>
               </div>
             </motion.div>
@@ -566,7 +566,7 @@ function TimerControls({ isPhone }) {
     <>
       <motion.button whileTap={{scale:0.95}}
         onClick={toggleRunning}
-        className="rounded-full bg-[#f0ede8] text-black font-bold shadow-[0_0_30px_rgba(240,237,232,0.25)]"
+        className="rounded-full bg-[#4ade80] text-black font-bold shadow-[0_0_30px_rgba(74,222,128,0.35)]"
         style={{padding: isPhone?"10px 36px":"13px 52px", fontSize: isPhone?15:18}}>
         {running ? "PAUSE" : "START"}
       </motion.button>
@@ -583,13 +583,24 @@ function TimerControls({ isPhone }) {
 }
 
 // ─── BEEP on timer end ───────────────────────────────────────────────────────
+// Global AudioContext — created on first user gesture to unlock audio on mobile
+let globalAudioCtx = null;
+function getAudioCtx() {
+  if (!globalAudioCtx) {
+    globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (globalAudioCtx.state === "suspended") globalAudioCtx.resume();
+  return globalAudioCtx;
+}
+function unlockAudio() { try { getAudioCtx(); } catch(e) {} }
+
 function useTimerEndBeep(time, mode) {
   const beeped = useRef(false);
   useEffect(() => {
     if ((mode === "short" || mode === "long") && time === 0 && !beeped.current) {
       beeped.current = true;
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = getAudioCtx();
         const beep = (freq, start, dur) => {
           const o = ctx.createOscillator();
           const g = ctx.createGain();
@@ -717,10 +728,11 @@ function MainLayout() {
                 <div className="flex items-center gap-3">
                   <motion.button whileTap={{scale:0.95}}
                     onClick={() => {
+                      unlockAudio();
                       if (mode === "long" && time === 0) { setShowSetTime(true); return; }
                       useStore.getState().toggleRunning();
                     }}
-                    className="flex items-center gap-2 rounded-full text-black font-bold shadow-[0_0_30px_rgba(240,237,232,0.25)] bg-[#f0ede8]"
+                    className="flex items-center gap-2 rounded-full text-black font-bold shadow-[0_0_30px_rgba(74,222,128,0.35)] bg-[#4ade80]"
                     style={{padding: isPhone?"10px 36px":"13px 52px", fontSize: isPhone?15:18}}>
                     {(mode === "long" && time === 0) ? "SET TIME" : running ? "PAUSE" : "START"}
                   </motion.button>
@@ -751,7 +763,7 @@ function MainLayout() {
                 <>
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-white text-xs font-bold tracking-widest uppercase">Immersive Ambiences</span>
-                    <button onClick={()=>setShowExplore(true)} className="text-[#f0ede8] text-xs font-semibold">View All</button>
+                    <button onClick={()=>setShowExplore(true)} className="text-[#4ade80] text-xs font-semibold">View All</button>
                   </div>
                   <AmbienceGrid cardH={100} count={6}/>
                 </>

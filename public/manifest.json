@@ -4,7 +4,7 @@
   "description": "Focus, Relax, Study - Live Study Clock",
   "start_url": "/",
   "display": "fullscreen",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#080d08",
   "theme_color": "#080d08",
   "icons": [
