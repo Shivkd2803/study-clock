@@ -12,5 +12,17 @@ export default defineConfig(({ command }) => ({
     outDir: "dist",
     emptyOutDir: true,
     assetsDir: "assets",
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom"],
+          motion: ["framer-motion"],
+          audio: ["howler"],
+          icons: ["react-icons"],
+          store: ["zustand"],
+        },
+      },
+    },
   },
 }));
