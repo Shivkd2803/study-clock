@@ -4,14 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Howl } from "howler";
 
 const EXTRA_BACKGROUNDS = [
-  { name: "Night Cabin", desc: "Crickets and night", category: "Night", thumbnail: "/thumbnails/campfire.jpg", video: "/videos/campfire.mp4", audio: "/audio/campfire.mp3" },
-  { name: "Mountain Lake", desc: "Wind and water", category: "Nature", thumbnail: "/thumbnails/forest.jpg", video: "/videos/forest.mp4", audio: "/audio/forest.mp3" },
-  { name: "Warm Fireplace", desc: "Crackling fire", category: "Night", thumbnail: "/thumbnails/campfire.jpg", video: "/videos/campfire.mp4", audio: "/audio/campfire.mp3" },
-  { name: "Snowfall", desc: "Snow and wind", category: "Winter", thumbnail: "/thumbnails/rainy.png", video: "/videos/rainy.mp4", audio: "/audio/rain.mp3" },
-  { name: "Ocean Sunset", desc: "Waves and sunset", category: "Underwater", thumbnail: "/thumbnails/underwater.png", video: "/videos/underwater.mp4", audio: "/audio/underwater.mp3" },
-  { name: "City Rain", desc: "Rain and city ambience", category: "Rain", thumbnail: "/thumbnails/rainy.png", video: "/videos/rainy.mp4", audio: "/audio/rain.mp3" },
   { name: "Beach Waves", desc: "Ocean waves", category: "Underwater", thumbnail: "/thumbnails/underwater.png", video: "/videos/underwater.mp4", audio: "/audio/underwater.mp3" },
-  { name: "Winter Night", desc: "Calm winter night", category: "Winter", thumbnail: "/thumbnails/forest.jpg", video: "/videos/forest.mp4", audio: "/audio/forest.mp3" },
 ];
 
 const CAT_ICONS = {

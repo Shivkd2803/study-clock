@@ -1,23 +1,43 @@
 import { create } from "zustand";
 
+// Load recent backgrounds from localStorage
+const loadRecents = () => {
+  try { return JSON.parse(localStorage.getItem("recentBgs") || "[]"); } catch { return []; }
+};
+
 export const useStore = create((set, get) => ({
   currentBackground: -1,
   mode: "clock",
   time: 0,
-  originalTime: 0, // stores the original set time so START can restart
+  originalTime: 0,
   running: false,
+  recentBackgrounds: loadRecents(), // array of background names, most recent first
 
   backgrounds: [
-    { name: "Rainy Window",    video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763333/rainy_sffag8.mp4",      audio: "/audio/rain.mp3",       thumbnail: "/thumbnails/rainy.png"    },
-    { name: "Underwater Calm", video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763351/underwater_cm7ts6.mp4", audio: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763421/underwater_m0fnhr.mp3", thumbnail: "/thumbnails/underwater.png"},
-    { name: "Cozy Coffee Shop",video: "/videos/coffee.mp4",     audio: "/audio/coffee.mp3",     thumbnail: "/thumbnails/coffee.jpg"   },
-    { name: "Forest Rain",     video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763338/forest_gzqbs0.mp4",     audio: "/audio/forest.mp3",     thumbnail: "/thumbnails/rainy.png"    },
-    { name: "Night Campfire",  video: "/videos/campfire.mp4",   audio: "/audio/campfire.mp3",   thumbnail: "/thumbnails/campfire.jpg" },
+    { name: "Rainy Window",    video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763333/rainy_sffag8.mp4",      audio: "/audio/rain.mp3",                thumbnail: "/thumbnails/rainy.png"              },
+    { name: "Underwater Calm", video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763351/underwater_cm7ts6.mp4", audio: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763421/underwater_m0fnhr.mp3", thumbnail: "/thumbnails/underwater.png"         },
+    { name: "Forest Rain",     video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763338/forest_gzqbs0.mp4",     audio: "/audio/forest.mp3",              thumbnail: "/thumbnails/forest.png"             },
+    { name: "Night Campfire",  video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779022519/campfire_v6irqm.mp4",   audio: "/audio/campfire.mp3",            thumbnail: "/thumbnails/campfire.png"           },
+    { name: "Natures Voice",   video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779021834/natures-voice_d1frsn.mp4", audio: "/audio/natures-voice.mp3",    thumbnail: "/thumbnails/natures-voice.png"      },
+    { name: "Birds Chirping",  video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779020509/birds-chirping_qdzykp.mp4", audio: "/audio/birds-chirping.mp3",  thumbnail: "/thumbnails/birds-chirping.png"     },
+    { name: "Lofi Music",      video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779021315/lofi-music_wolj2a.mp4", audio: "/audio/lofi-music.mp3",          thumbnail: "/thumbnails/lofi-music.png"         },
+    { name: "Deep Focus",      video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779021312/deep-focus_g9fqlx.mp4", audio: "/audio/deep-focus.mp3",          thumbnail: "/thumbnails/deep-focus.png"         },
   ],
 
   setBackground: (index) => {
-    if (index === -1) window.dispatchEvent(new Event("pause-main-audio"));
-    set({ currentBackground: index });
+    if (index === -1) {
+      window.dispatchEvent(new Event("pause-main-audio"));
+      set({ currentBackground: index });
+      return;
+    }
+    const name = get().backgrounds[index]?.name;
+    if (name) {
+      const recents = [name, ...get().recentBackgrounds.filter(n => n !== name)].slice(0, 8);
+      localStorage.setItem("recentBgs", JSON.stringify(recents));
+      set({ currentBackground: index, recentBackgrounds: recents });
+    } else {
+      set({ currentBackground: index });
+    }
   },
 
   setMode: (mode) => {

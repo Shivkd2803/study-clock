@@ -39,14 +39,7 @@ function useWindowSize() {
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const EXTRA_BGS = [
-  { name: "Night Cabin",     desc: "Crickets and night",                          category: "Night",      thumbnail: "/thumbnails/campfire.jpg",   video: "/videos/campfire.mp4",   audio: "/audio/campfire.mp3"   },
-  { name: "Mountain Lake",   desc: "Wind and water",                               category: "Nature",     thumbnail: "/thumbnails/forest.jpg",     video: "/videos/forest.mp4",     audio: "/audio/forest.mp3"     },
-  { name: "Warm Fireplace",  desc: "Crackling fire",                               category: "Night",      thumbnail: "/thumbnails/campfire.jpg",   video: "/videos/campfire.mp4",   audio: "/audio/campfire.mp3"   },
-  { name: "Snowfall",        desc: "Snow and wind",                                category: "Winter",     thumbnail: "/thumbnails/rainy.png",      video: "/videos/rainy.mp4",      audio: "/audio/rain.mp3"       },
-  { name: "Beach Waves",     desc: "Sunlit beach, gentle waves",                   category: "Underwater", thumbnail: "/thumbnails/underwater.png", video: "/videos/underwater.mp4", audio: "/audio/underwater.mp3" },
-  { name: "Rain on Tent",    desc: "Camping tent, wet rain, soft forest lights",   category: "Rain",       thumbnail: "/thumbnails/rainy.png",      video: "/videos/rainy.mp4",      audio: "/audio/rain.mp3"       },
-  { name: "Reading Nook",    desc: "Comfy chair, open book, soft lamp light",      category: "Night",      thumbnail: "/thumbnails/campfire.jpg",   video: "/videos/campfire.mp4",   audio: "/audio/campfire.mp3"   },
-  { name: "City Night Cafe", desc: "Wet city street, cafe window, light chatter",  category: "Rain",       thumbnail: "/thumbnails/rainy.png",      video: "/videos/rainy.mp4",      audio: "/audio/rain.mp3"       },
+  { name: "Beach Waves", desc: "Sunlit beach, gentle waves", category: "Underwater", thumbnail: "/thumbnails/underwater.png", video: "/videos/underwater.mp4", audio: "/audio/underwater.mp3" },
 ];
 const BG_DESCS = { "Rainy Window":"Rain and thunder","Underwater Calm":"Ocean and bubbles","Cozy Coffee Shop":"Ambient cafe sounds","Forest Rain":"Rain in the forest","Night Campfire":"Crackling fire" };
 const BG_CATS  = { "Rainy Window":"Rain","Underwater Calm":"Underwater","Cozy Coffee Shop":"Night","Forest Rain":"Rain","Night Campfire":"Night" };
@@ -297,7 +290,17 @@ function AmbienceGrid({ cardH=100, count=6 }) {
   const backgrounds = useStore((s) => s.backgrounds);
   const current     = useStore((s) => s.currentBackground);
   const setBackground = useStore((s) => s.setBackground);
-  const all = [...backgrounds.map((b,i)=>({...b,storeIndex:i})),...EXTRA_BGS].slice(0,count);
+  const recentBackgrounds = useStore((s) => s.recentBackgrounds);
+  const allBgs = [...backgrounds.map((b,i)=>({...b,storeIndex:i})),...EXTRA_BGS];
+  // Sort by recently used first
+  const all = [...allBgs].sort((a, b) => {
+    const ai = recentBackgrounds.indexOf(a.name);
+    const bi = recentBackgrounds.indexOf(b.name);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  }).slice(0, count);
   return (
     <div className="grid grid-cols-2 gap-2.5">
       {/* No Background tile */}
