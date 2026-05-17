@@ -1,7 +1,5 @@
-const CACHE_NAME = "live-study-clock-v2";
-const ASSETS = [
-  "/",
-  "/index.html",
+const CACHE_NAME = "live-study-clock-v3";
+const STATIC_ASSETS = [
   "/logo.png",
   "/manifest.json",
   "/default-wallpaper-phone.jpg",
@@ -10,7 +8,7 @@ const ASSETS = [
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
@@ -25,15 +23,33 @@ self.addEventListener("activate", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
-  // Network first for HTML — always get latest
-  if (e.request.mode === "navigate") {
+  const url = new URL(e.request.url);
+
+  // Always fetch fresh for HTML and JS/CSS assets — never cache them
+  if (
+    e.request.mode === "navigate" ||
+    url.pathname.endsWith(".js") ||
+    url.pathname.endsWith(".css") ||
+    url.pathname.endsWith(".jsx")
+  ) {
+    e.respondWith(fetch(e.request).catch(() => caches.match("/index.html")));
+    return;
+  }
+
+  // Cache first for static images only
+  if (
+    url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".jpg") ||
+    url.pathname.endsWith(".jpeg") ||
+    url.pathname.endsWith(".webp") ||
+    url.pathname.endsWith(".ico")
+  ) {
     e.respondWith(
-      fetch(e.request).catch(() => caches.match("/index.html"))
+      caches.match(e.request).then((cached) => cached || fetch(e.request))
     );
     return;
   }
-  // Cache first for assets
-  e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request))
-  );
+
+  // Network first for everything else
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });
