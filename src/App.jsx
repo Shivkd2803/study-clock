@@ -164,7 +164,8 @@ function SetTimeSheet({ onClose }) {
       initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       onClick={(e) => e.target===e.currentTarget && onClose()}>
       <motion.div initial={{y:"100%"}} animate={{y:0}} exit={{y:"100%"}} transition={{type:"spring",damping:25}}
-        className="w-full max-w-lg bg-[#0d140d] rounded-t-[32px] border-t border-white/10 p-8 flex flex-col items-center gap-6">
+        className="w-full max-w-lg rounded-t-[32px] border-t border-white/15 p-8 flex flex-col items-center gap-6"
+        style={{background:"rgba(240,237,232,0.12)", backdropFilter:"blur(30px)", WebkitBackdropFilter:"blur(30px)"}}>
         <div className="w-10 h-1 bg-white/20 rounded-full"/>
         <h2 className="text-white text-2xl font-bold">Set Timer</h2>
 
@@ -678,8 +679,7 @@ function MainLayout() {
 
   return (
     <div className="fixed inset-0 bg-[#080d08] overflow-hidden" style={{fontFamily:"'DM Sans', sans-serif"}}>
-      {isDesktop && <WindowControls/>}
-
+      
       {/* VIDEO — true full screen for ALL sizes */}
       <div className="absolute inset-0">
         {/* Default wallpaper — shown when no ambience is selected */}
@@ -701,7 +701,7 @@ function MainLayout() {
       <div className="absolute inset-0 z-20 overflow-y-auto" style={{scrollbarWidth:"none"}}>
         <div className="min-h-full flex flex-col" style={{paddingBottom: isPhone ? 16 : 24}}>
 
-          {/* TRANSLUCENT NAV BAR */}
+          {/* TRANSLUCENT NAV BAR — all sizes */}
           <NavBar onFullscreen={()=>setShowFSPreview(true)} isLarge={!isPhone}/>
 
           {/* CLOCK — flex-1 centers it in remaining space */}
