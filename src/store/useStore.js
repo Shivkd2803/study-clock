@@ -14,13 +14,13 @@ export const useStore = create((set, get) => ({
   recentBackgrounds: loadRecents(), // array of background names, most recent first
 
   backgrounds: [
-    { name: "Rainy Window",    video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763333/rainy_sffag8.mp4",      audio: "/audio/rain.mp3",                thumbnail: "/thumbnails/rainy.png"              },
+    { name: "Rainy Window",    video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779047213/rainy_dgznys.mp4",      audio: "/audio/rain.mp3",                thumbnail: "/thumbnails/rainy.png"              },
     { name: "Underwater Calm", video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763351/underwater_cm7ts6.mp4", audio: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763421/underwater_m0fnhr.mp3", thumbnail: "/thumbnails/underwater.png"         },
     { name: "Forest Rain",     video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1778763338/forest_gzqbs0.mp4",     audio: "/audio/forest.mp3",              thumbnail: "/thumbnails/forest.png"             },
     { name: "Night Campfire",  video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779022519/campfire_v6irqm.mp4",   audio: "/audio/campfire.mp3",            thumbnail: "/thumbnails/campfire.png"           },
-    { name: "Natures Voice",   video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779021834/natures-voice_d1frsn.mp4", audio: "/audio/natures-voice.mp3",    thumbnail: "/thumbnails/natures-voice.png"      },
-    { name: "Birds Chirping",  video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779020509/birds-chirping_qdzykp.mp4", audio: "/audio/birds-chirping.mp3",  thumbnail: "/thumbnails/birds-chirping.png"     },
-    { name: "Lofi Music",      video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779021315/lofi-music_wolj2a.mp4", audio: "/audio/lofi-music.mp3",          thumbnail: "/thumbnails/lofi-music.png"         },
+    { name: "Natures Voice",   video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779021834/natures-voice_d1frsn.mp4", audio: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779046056/natures-voice_itv7fd.mp3",    thumbnail: "/thumbnails/natures-voice.png"      },
+    { name: "Birds Chirping",  video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779020509/birds-chirping_qdzykp.mp4", audio: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779046036/birds-chirping_wtf48y.mp3",  thumbnail: "/thumbnails/birds-chirping.png"     },
+    { name: "Lofi Music",      video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779045770/lofi-music_qpm3gt.mp4", audio: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779046928/lofi-music_jqvlsy.mp3",          thumbnail: "/thumbnails/lofi-music.png"         },
     { name: "Deep Focus",      video: "https://res.cloudinary.com/dpoy9zmcj/video/upload/v1779021312/deep-focus_g9fqlx.mp4", audio: "/audio/deep-focus.mp3",          thumbnail: "/thumbnails/deep-focus.png"         },
   ],
 
