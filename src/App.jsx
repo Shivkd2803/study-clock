@@ -63,22 +63,15 @@ const IcoExplore  = (s=22) => <svg width={s} height={s} viewBox="0 0 24 24" fill
 const IcoReset    = (s=20) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>;
 
 // ─── TRANSLUCENT NAVBAR ───────────────────────────────────────────────────────
-function NavBar({ onFullscreen, isLarge = false }) {
+function NavBar({ isLarge = false, isPhoneLandscape = false, isDesktop = false, onHamburger }) {
   const greeting = getGreeting();
 
-  const handleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen?.();
-    } else {
-      document.exitFullscreen?.();
-    }
-    onFullscreen(); // still show FSPreview overlay
-  };
+  const slim = isDesktop || isPhoneLandscape;
 
   return (
     <div className="flex-shrink-0 flex items-center justify-between"
       style={{
-        padding: isLarge ? "20px 28px 16px" : "16px 16px 10px",
+        padding: slim ? "10px 20px 8px" : isLarge ? "20px 28px 16px" : "16px 16px 10px",
         background: "rgba(0,0,0,0.25)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
@@ -86,22 +79,26 @@ function NavBar({ onFullscreen, isLarge = false }) {
       }}>
       <div className="flex items-center gap-2.5">
         {/* App logo */}
-        <div className={`rounded-2xl overflow-hidden flex-shrink-0 ${isLarge ? "w-11 h-11" : "w-9 h-9"}`}
+        <div className={`rounded-2xl overflow-hidden flex-shrink-0 ${isLarge && !slim ? "w-11 h-11" : "w-8 h-8"}`}
           style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.12)" }}>
           <img src="/logo.png" alt="Live Study Clock"
             className="w-full h-full object-contain p-1"
             style={{ filter: "invert(1) brightness(0.9)" }} />
         </div>
         <div>
-          <p className={`text-white font-semibold drop-shadow ${isLarge ? "text-base" : "text-sm"}`}>{greeting.text}</p>
-          <p className={`text-white/55 drop-shadow ${isLarge ? "text-xs" : "text-[10px]"}`}>Stay focused and keep growing.</p>
+          <p className={`text-white font-semibold drop-shadow ${isLarge && !slim ? "text-base" : "text-sm"}`}>{greeting.text}</p>
+          <p className={`text-white/55 drop-shadow ${isLarge && !slim ? "text-xs" : "text-[10px]"}`}>Stay focused and keep growing.</p>
         </div>
       </div>
-      <button onClick={handleFullscreen}
-        className={`rounded-2xl flex items-center justify-center text-white/80 hover:text-white transition-all ${isLarge ? "w-11 h-11" : "w-9 h-9"}`}
-        style={{ background: "rgba(255,255,255,0.10)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.15)" }}>
-        {IcoExpand(isLarge ? 18 : 16)}
-      </button>
+      {isDesktop && (
+        <button
+          onClick={onHamburger}
+          className="w-9 h-9 flex flex-col items-center justify-center gap-1.5 text-white/80 hover:text-white transition-all">
+          <span className="w-4 h-0.5 bg-current rounded-full"/>
+          <span className="w-4 h-0.5 bg-current rounded-full"/>
+          <span className="w-4 h-0.5 bg-current rounded-full"/>
+        </button>
+      )}
     </div>
   );
 }
@@ -240,8 +237,76 @@ function FSPreview({ onClose }) {
   const clock       = useLiveClock();
   const { w, h }   = useWindowSize();
   const landscape   = w > h;
-  const mm = String(Math.floor(time/60)).padStart(2,"0");
-  const ss = String(time%60).padStart(2,"0");
+  const containerRef = useRef(null);
+
+  // Enter native fullscreen on mount, exit on unmount
+  useEffect(() => {
+    const el = document.documentElement;
+    let listenerAttached = false;
+
+    const onFSChange = () => {
+      if (!listenerAttached) return;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        onClose();
+      }
+    };
+
+    const tryFullscreen = async () => {
+      try {
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      } catch (e) {
+        // Fullscreen rejected (e.g. foldable/hybrid device) — overlay still shows, just not native FS
+      }
+      // Attach listener AFTER fullscreen entry settles so the enter-event doesn't trigger onClose
+      setTimeout(() => {
+        listenerAttached = true;
+        document.addEventListener("fullscreenchange", onFSChange);
+        document.addEventListener("webkitfullscreenchange", onFSChange);
+      }, 300);
+    };
+
+    tryFullscreen();
+
+    return () => {
+      listenerAttached = false;
+      document.removeEventListener("fullscreenchange", onFSChange);
+      document.removeEventListener("webkitfullscreenchange", onFSChange);
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    };
+  }, []);
+
+  // Double-tap to close (touch) / double-click (mouse)
+  const lastTouchFSRef = useRef(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onTouchEnd = (e) => {
+      if (e.target?.closest("button")) return;
+      const now = Date.now();
+      if (now - lastTouchFSRef.current < 350) {
+        lastTouchFSRef.current = 0;
+        onClose();
+      } else {
+        lastTouchFSRef.current = now;
+      }
+    };
+    const onDblClick = (e) => {
+      if (e.target?.closest("button")) return;
+      onClose();
+    };
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("dblclick", onDblClick);
+    return () => {
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("dblclick", onDblClick);
+    };
+  }, []);
+
+  const handleClose = onClose;
+
   // HH:MM format for fullscreen preview
   const fsH = Math.floor(time/3600);
   const fsM = Math.floor((time%3600)/60);
@@ -250,12 +315,31 @@ function FSPreview({ onClose }) {
     ? `${String(fsH).padStart(2,"0")}:${String(fsM).padStart(2,"0")}`
     : `${String(fsM).padStart(2,"0")}:${String(fsS).padStart(2,"0")}`;
   const minD = Math.min(w,h), maxD = Math.max(w,h);
-  const clockFs = landscape ? Math.min(maxD*0.22,280) : Math.min(minD*0.30,220);
-  const ampmFs  = landscape ? Math.min(maxD*0.06,72)  : Math.min(minD*0.085,58);
-  const timerFs = landscape ? Math.min(maxD*0.20,260) : Math.min(minD*0.28,200);
+  const isPhoneFS   = w < 640;
+  const isTabletFS  = w >= 640 && w < 1100;
+  const isDesktopFS = w >= 1100;
+  // Phone — unchanged
+  // Tablet (iPad) fullscreen — back to original
+  // Desktop — slightly reduced
+  const clockFs = isPhoneFS
+    ? (landscape ? Math.min(maxD*0.22,280)  : Math.min(minD*0.30,220))
+    : isTabletFS
+    ? (landscape ? Math.min(maxD*0.22,280)  : Math.min(minD*0.30,220))
+    : (landscape ? Math.min(maxD*0.26,360)  : Math.min(minD*0.38,320));
+  const ampmFs = isPhoneFS
+    ? (landscape ? Math.min(maxD*0.06,72)   : Math.min(minD*0.085,58))
+    : isTabletFS
+    ? (landscape ? Math.min(maxD*0.06,72)   : Math.min(minD*0.085,58))
+    : (landscape ? Math.min(maxD*0.075,95)  : Math.min(minD*0.10,82));
+  const timerFs = isPhoneFS
+    ? (landscape ? Math.min(maxD*0.20,260)  : Math.min(minD*0.28,200))
+    : isTabletFS
+    ? (landscape ? Math.min(maxD*0.20,260)  : Math.min(minD*0.28,200))
+    : (landscape ? Math.min(maxD*0.24,340)  : Math.min(minD*0.34,300));
   const bg = current !== -1 ? backgrounds[current] : null;
+
   return (
-    <motion.div className="fixed inset-0 z-[2000] bg-black overflow-hidden"
+    <motion.div ref={containerRef} className="fixed inset-0 z-[2000] bg-black overflow-hidden"
       initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.3}}>
       <div className="absolute inset-0">
         {bg && (
@@ -288,7 +372,7 @@ function FSPreview({ onClose }) {
         </div>
       )}
       <motion.button initial={{opacity:0}} animate={{opacity:1}} transition={{delay:0.5}}
-        onClick={onClose}
+        onClick={handleClose}
         className="absolute top-5 right-5 z-20 w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center text-white/80 hover:bg-black/60 hover:text-white transition-all">
         {IcoCompress(18)}
       </motion.button>
@@ -570,6 +654,110 @@ function ExploreModal({ onClose, desktop=false }) {
   );
 }
 
+// ─── DESKTOP SIDEBAR ─────────────────────────────────────────────────────────
+function DesktopSidebar({ open, onClose, onViewAll }) {
+  const backgrounds   = useStore((s) => s.backgrounds);
+  const current       = useStore((s) => s.currentBackground);
+  const setBackground = useStore((s) => s.setBackground);
+
+  const all = [...backgrounds.map((b,i)=>({...b,storeIndex:i})),...EXTRA_BGS];
+  // Show 6 total: 1 "No Background" slot + 5 real ambiences
+  const INITIAL = 6;
+  const visible = all.slice(0, INITIAL - 1);
+  const hasMore = all.length > INITIAL - 1;
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            className="fixed inset-0 z-[800]"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+            style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
+          />
+          {/* Sidebar panel */}
+          <motion.div
+            className="fixed top-0 right-0 h-full z-[900] flex flex-col"
+            initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 260 }}
+            style={{
+              width: 360,
+              background: "rgba(8,13,8,0.88)",
+              backdropFilter: "blur(32px)",
+              WebkitBackdropFilter: "blur(32px)",
+              borderLeft: "1px solid rgba(255,255,255,0.10)",
+            }}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between flex-shrink-0"
+              style={{ padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+              <span className="text-white text-xs font-bold tracking-widest uppercase">Immersive Ambiences</span>
+              <button onClick={onClose}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-white/50 hover:text-white transition-all"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Scrollable grid */}
+            <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", padding: "16px 16px 24px" }}>
+              <div className="grid grid-cols-2 gap-2.5">
+
+                {/* No Background tile — exact match to AmbienceGrid */}
+                <motion.div whileTap={{ scale: 0.95 }}
+                  onClick={() => { setBackground(-1); onClose(); }}
+                  className={`relative rounded-[16px] overflow-hidden cursor-pointer border-2 transition-all flex flex-col items-center justify-center gap-1.5 ${current === -1 ? "border-[#f0ede8] shadow-[0_0_14px_rgba(240,237,232,0.35)]" : "border-white/15"}`}
+                  style={{ height: 100, background: "rgba(0,0,0,0.7)" }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                    stroke={current === -1 ? "#f0ede8" : "rgba(255,255,255,0.4)"} strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                  </svg>
+                  <p className="text-[11px] font-bold" style={{ color: current === -1 ? "#f0ede8" : "rgba(255,255,255,0.5)" }}>No Background</p>
+                </motion.div>
+
+                {/* Ambience tiles — exact match to AmbienceGrid */}
+                {visible.map((bg, i) => {
+                  const idx = bg.storeIndex ?? null;
+                  const isActive = current === idx && idx != null;
+                  return (
+                    <motion.div key={i} whileTap={{ scale: 0.95 }}
+                      onClick={() => { if (idx != null) { setBackground(idx); onClose(); } }}
+                      className={`relative rounded-[16px] overflow-hidden cursor-pointer border-2 transition-all ${isActive ? "border-[#f0ede8] shadow-[0_0_14px_rgba(240,237,232,0.35)]" : "border-transparent"}`}
+                      style={{ height: 100 }}>
+                      <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover"/>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"/>
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-[#f0ede8]/90 px-1.5 py-0.5 rounded-full">
+                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>
+                        <span className="text-[8px] text-black font-bold">LIVE</span>
+                      </div>
+                      <p className="absolute bottom-2 left-2.5 text-white text-[11px] font-bold drop-shadow">{bg.name}</p>
+                    </motion.div>
+                  );
+                })}
+              </div>
+
+              {/* View More — opens ExploreModal */}
+              {hasMore && (
+                <button
+                  onClick={() => { onClose(); onViewAll(); }}
+                  className="w-full mt-3 py-2.5 rounded-[14px] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 hover:bg-white/10"
+                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#f0ede8" }}>
+                  View More
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+              )}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ─── TIMER CONTROLS (START/PAUSE + RESET) ────────────────────────────────────
 function TimerControls({ isPhone }) {
   const mode          = useStore((s) => s.mode);
@@ -645,6 +833,7 @@ function MainLayout() {
   const [showExplore,   setShowExplore]   = useState(false);
   const [showSetTime,   setShowSetTime]   = useState(false);
   const [showFSPreview, setShowFSPreview] = useState(false);
+  const [showSidebar,   setShowSidebar]   = useState(false);
 
   useTimerEndBeep(time, mode);
 
@@ -665,27 +854,57 @@ function MainLayout() {
   const isDesktop = w >= 1100;
 
   // Phone clock font — large to fill screen like design
+  const isPortrait = h > w;
   const clockFs = isPhone
     ? Math.min(w * 0.30, 160)
     : isTablet
-    ? Math.min(w * 0.18, 220)
+    ? (isPortrait ? Math.min(w * 0.19, 210) : Math.min(w * 0.24, 280))
     : Math.min(w * 0.105, 180);
 
   const ampmFs = isPhone
     ? Math.min(w * 0.044, 22)
     : isTablet
-    ? Math.min(w * 0.05, 64)
+    ? (isPortrait ? Math.min(w * 0.052, 60) : Math.min(w * 0.065, 80))
     : Math.min(w * 0.03, 54);
 
   const timerFs = isPhone
     ? Math.min(w * 0.22, 130)
     : isTablet
-    ? Math.min(w * 0.18, 220)
+    ? (isPortrait ? Math.min(w * 0.18, 210) : Math.min(w * 0.22, 270))
     : Math.min(w * 0.095, 160);
 
   // Ambience row card sizes
   const cardW = isPhone ? 0 : isTablet ? Math.min(w*0.18,165) : Math.min(w*0.14,195);
   const cardH = isPhone ? 0 : isTablet ? Math.min(h*0.13,115) : Math.min(h*0.15,130);
+
+  // Double-tap (touch) / double-click (mouse) to open fullscreen — works on all devices
+  const overlayRef = useRef(null);
+  const lastTouchRef = useRef(0);
+
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (!el) return;
+    const onTouchEnd = (e) => {
+      if (e.target?.closest("button, a, input, select, textarea, [role='button']")) return;
+      const now = Date.now();
+      if (now - lastTouchRef.current < 350) {
+        lastTouchRef.current = 0;
+        setShowFSPreview(true);
+      } else {
+        lastTouchRef.current = now;
+      }
+    };
+    const onDblClick = (e) => {
+      if (e.target?.closest("button, a, input, select, textarea, [role='button']")) return;
+      setShowFSPreview(true);
+    };
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("dblclick", onDblClick);
+    return () => {
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("dblclick", onDblClick);
+    };
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-[#080d08] overflow-hidden" style={{fontFamily:"'DM Sans', sans-serif"}}>
@@ -708,11 +927,11 @@ function MainLayout() {
       </div>
 
       {/* SCROLLABLE OVERLAY */}
-      <div className="absolute inset-0 z-20 overflow-y-auto" style={{scrollbarWidth:"none"}}>
+      <div ref={overlayRef} className="absolute inset-0 z-20 overflow-y-auto" style={{scrollbarWidth:"none"}}>
         <div className="min-h-full flex flex-col" style={{paddingBottom: isPhone ? 16 : 24}}>
 
           {/* TRANSLUCENT NAV BAR — all sizes */}
-          <NavBar onFullscreen={()=>setShowFSPreview(true)} isLarge={!isPhone}/>
+          <NavBar isLarge={!isPhone} isPhoneLandscape={isPhone && w > h} isDesktop={isDesktop} onHamburger={() => setShowSidebar(true)}/>
 
           {/* CLOCK — flex-1 centers it in remaining space */}
           <div className="flex-1 flex items-center justify-center" style={{minHeight: isPhone?"38vh":isTablet?"40vh":"44vh"}}>
@@ -768,7 +987,8 @@ function MainLayout() {
             <ModePill sz={isPhone?"sm":isDesktop?"lg":"md"} onSetTime={()=>setShowSetTime(true)}/>
           </div>
 
-          {/* IMMERSIVE AMBIENCES — frosted glass card */}
+          {/* IMMERSIVE AMBIENCES — frosted glass card (phone & tablet only; desktop uses sidebar) */}
+          {!isDesktop && (
           <div style={{margin: isPhone?"0 16px 16px":"0 20px 20px"}}>
             <div className="rounded-[24px] bg-black/38 backdrop-blur-md border border-white/10"
               style={{padding: isPhone?"16px":"20px"}}>
@@ -785,6 +1005,7 @@ function MainLayout() {
               )}
             </div>
           </div>
+          )}
 
         </div>
       </div>
@@ -792,6 +1013,7 @@ function MainLayout() {
       <AnimatePresence>{showSetTime   && <SetTimeSheet onClose={()=>setShowSetTime(false)}/>}</AnimatePresence>
       <AnimatePresence>{showFSPreview && <FSPreview    onClose={()=>setShowFSPreview(false)}/>}</AnimatePresence>
       <AnimatePresence>{showExplore   && <ExploreModal onClose={()=>setShowExplore(false)} desktop={isDesktop}/>}</AnimatePresence>
+      {isDesktop && <DesktopSidebar open={showSidebar} onClose={()=>setShowSidebar(false)} onViewAll={()=>setShowExplore(true)}/>}
     </div>
   );
 }
@@ -807,21 +1029,30 @@ export default function App() {
 
   // WakeLock — prevent screen from sleeping while app is open
   useEffect(() => {
-    let wakeLock = null;
+    const wakeLockRef = { current: null };
     const requestWakeLock = async () => {
       try {
         if ("wakeLock" in navigator) {
-          wakeLock = await navigator.wakeLock.request("screen");
+          if (wakeLockRef.current) {
+            try { await wakeLockRef.current.release(); } catch(e) {}
+          }
+          wakeLockRef.current = await navigator.wakeLock.request("screen");
+          wakeLockRef.current.addEventListener("release", () => {
+            // Auto re-acquire if released by system (e.g. tab switch back)
+            if (document.visibilityState === "visible") requestWakeLock();
+          });
         }
       } catch(e) {}
     };
     requestWakeLock();
-    // Re-acquire on visibility change (phone lock/unlock)
     const onVisible = () => { if (document.visibilityState === "visible") requestWakeLock(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      if (wakeLock) wakeLock.release();
       document.removeEventListener("visibilitychange", onVisible);
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
     };
   }, []);
 
