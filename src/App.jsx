@@ -65,6 +65,16 @@ const IcoReset    = (s=20) => <svg width={s} height={s} viewBox="0 0 24 24" fill
 // ─── TRANSLUCENT NAVBAR ───────────────────────────────────────────────────────
 function NavBar({ onFullscreen, isLarge = false }) {
   const greeting = getGreeting();
+
+  const handleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+    onFullscreen(); // still show FSPreview overlay
+  };
+
   return (
     <div className="flex-shrink-0 flex items-center justify-between"
       style={{
@@ -87,7 +97,7 @@ function NavBar({ onFullscreen, isLarge = false }) {
           <p className={`text-white/55 drop-shadow ${isLarge ? "text-xs" : "text-[10px]"}`}>Stay focused and keep growing.</p>
         </div>
       </div>
-      <button onClick={onFullscreen}
+      <button onClick={handleFullscreen}
         className={`rounded-2xl flex items-center justify-center text-white/80 hover:text-white transition-all ${isLarge ? "w-11 h-11" : "w-9 h-9"}`}
         style={{ background: "rgba(255,255,255,0.10)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.15)" }}>
         {IcoExpand(isLarge ? 18 : 16)}
@@ -794,6 +804,27 @@ export default function App() {
     link.href = "https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap";
     document.head.appendChild(link);
   }, []);
+
+  // WakeLock — prevent screen from sleeping while app is open
+  useEffect(() => {
+    let wakeLock = null;
+    const requestWakeLock = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await navigator.wakeLock.request("screen");
+        }
+      } catch(e) {}
+    };
+    requestWakeLock();
+    // Re-acquire on visibility change (phone lock/unlock)
+    const onVisible = () => { if (document.visibilityState === "visible") requestWakeLock(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      if (wakeLock) wakeLock.release();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
   usePomodoro();
   return <MainLayout/>;
 }

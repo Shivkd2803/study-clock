@@ -32,6 +32,7 @@ export default function BackgroundVideo() {
         <motion.video
           key={current}
           autoPlay muted loop playsInline controls={false} disablePictureInPicture
+          preload="auto"
           controlsList="nodownload nofullscreen noremoteplayback"
           onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           className="absolute inset-0 w-full h-full object-cover brightness-[0.8] contrast-[1.05] saturate-[1.1]"
