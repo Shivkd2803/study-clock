@@ -19,7 +19,7 @@ function useLiveClock() {
     const t = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
     const parts = t.split(" ");
     const [h, m] = (parts[0] || "12:00").split(":");
-    return { h: h||"12", m: m||"00", ampm: parts[1]||"AM", full: parts[0]||"12:00" };
+    return { h: h||"12", m: m||"00", ampm: parts[1]||"AM", full: parts[0]||"12:00", rawH: h||"12", rawM: m||"00" };
   };
   const [t, setT] = useState(get);
   useEffect(() => { const iv = setInterval(() => setT(get()), 1000); return () => clearInterval(iv); }, []);
@@ -301,6 +301,18 @@ function FSPreview({ onClose }) {
     return () => clearTimeout(hideTimerRef.current);
   }, []);
 
+  // Clock style: 0 = normal, 1 = flip
+  const [clockStyle, setClockStyle] = useState(0);
+  const swipeStartX = useRef(null);
+  const onSwipeStart = (e) => { swipeStartX.current = e.touches?.[0]?.clientX ?? e.clientX; };
+  const onSwipeEnd   = (e) => {
+    if (swipeStartX.current === null) return;
+    const endX = e.changedTouches?.[0]?.clientX ?? e.clientX;
+    const dx = swipeStartX.current - endX;
+    if (Math.abs(dx) > 60) setClockStyle(s => s === 0 ? 1 : 0);
+    swipeStartX.current = null;
+  };
+
   // Double-tap to close (touch) / double-click (mouse)
   const lastTouchFSRef = useRef(0);
   useEffect(() => {
@@ -364,7 +376,11 @@ function FSPreview({ onClose }) {
   return (
     <motion.div ref={containerRef} className="fixed inset-0 z-[2000] bg-black overflow-hidden"
       initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.3}}
-      onMouseMove={resetHideTimer} onTouchStart={resetHideTimer}>
+      onMouseMove={resetHideTimer}
+      onTouchStart={(e) => { resetHideTimer(); onSwipeStart(e); }}
+      onTouchEnd={onSwipeEnd}
+      onMouseDown={onSwipeStart}
+      onMouseUp={onSwipeEnd}>
       <div className="absolute inset-0">
         {bg && (
           <video autoPlay loop muted playsInline controls={false} disablePictureInPicture className="w-full h-full object-cover">
@@ -373,28 +389,65 @@ function FSPreview({ onClose }) {
         )}
         <div className="absolute inset-0 bg-black/20"/>
       </div>
-      {mode==="clock" ? (
-        <div className="absolute inset-0 flex items-center justify-center z-10" style={{paddingLeft: 50}}>
-          {landscape ? (
-            <div className="flex items-end gap-4">
-              <span className="text-white font-bold leading-none drop-shadow-lg" style={{fontSize:clockFs}}>{clock.full}</span>
-              <span className="text-white font-bold drop-shadow" style={{fontSize:ampmFs,marginBottom:clockFs*0.04}}>{clock.ampm}</span>
-            </div>
-          ) : (
-            <div className="flex items-end gap-3">
-              <div className="flex flex-col items-center" style={{lineHeight:0.88}}>
-                <span className="text-white drop-shadow-lg" style={{fontSize:clockFs, fontFamily:"'Outfit', sans-serif", fontWeight:600}}>{clock.h}</span>
-                <span className="text-white drop-shadow-lg" style={{fontSize:clockFs, fontFamily:"'Outfit', sans-serif", fontWeight:600}}>{clock.m}</span>
-              </div>
-              <span className="text-white/70 drop-shadow pb-1" style={{fontSize:Math.min(clockFs*0.22,42), fontFamily:"'Outfit', sans-serif", fontWeight:300}}>{clock.ampm}</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <span className="text-white font-bold drop-shadow-lg" style={{fontSize:timerFs,lineHeight:1}}>{fsTimerDisplay}</span>
-        </div>
-      )}
+
+      {/* CLOCK DISPLAY */}
+      <AnimatePresence mode="wait">
+        {clockStyle === 0 ? (
+          <motion.div key="normal-clock"
+            initial={{opacity:0, x: 60}} animate={{opacity:1, x:0}} exit={{opacity:0, x:-60}}
+            transition={{duration:0.3}}
+            className="absolute inset-0 flex items-center justify-center z-10" style={{paddingLeft: 50}}>
+            {mode==="clock" ? (
+              landscape ? (
+                <div className="flex items-end gap-4">
+                  <span className="text-white font-bold leading-none drop-shadow-lg" style={{fontSize:clockFs}}>{clock.full}</span>
+                  <span className="text-white font-bold drop-shadow" style={{fontSize:ampmFs,marginBottom:clockFs*0.04}}>{clock.ampm}</span>
+                </div>
+              ) : (
+                <div className="flex items-end gap-3">
+                  <div className="flex flex-col items-center" style={{lineHeight:0.88}}>
+                    <span className="text-white drop-shadow-lg" style={{fontSize:clockFs, fontFamily:"'Outfit', sans-serif", fontWeight:600}}>{clock.h}</span>
+                    <span className="text-white drop-shadow-lg" style={{fontSize:clockFs, fontFamily:"'Outfit', sans-serif", fontWeight:600}}>{clock.m}</span>
+                  </div>
+                  <span className="text-white/70 drop-shadow pb-1" style={{fontSize:Math.min(clockFs*0.22,42), fontFamily:"'Outfit', sans-serif", fontWeight:300}}>{clock.ampm}</span>
+                </div>
+              )
+            ) : (
+              <span className="text-white font-bold drop-shadow-lg" style={{fontSize:timerFs,lineHeight:1}}>{fsTimerDisplay}</span>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div key="flip-clock"
+            initial={{opacity:0, x: 60}} animate={{opacity:1, x:0}} exit={{opacity:0, x:-60}}
+            transition={{duration:0.3}}
+            className="absolute inset-0 flex items-center justify-center z-10">
+            <FlipClock
+              cardSize={landscape ? Math.min(w*0.42, h*0.75) : (isPhoneFS ? Math.min(w*0.55, h*0.22) : Math.min(w*0.44, h*0.38))}
+              isTimer={mode !== "clock"}
+              timerDisplay={fsTimerDisplay}
+              clock={clock}
+              landscape={landscape}
+              phonePortrait={isPhoneFS && !landscape}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Swipe hint dots */}
+      <AnimatePresence>
+        {uiVisible && (
+          <motion.div key="dots" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+            className="absolute bottom-6 left-1/2 z-20 flex gap-2" style={{transform:"translateX(-50%)"}}>
+            {[0,1].map(i => (
+              <div key={i} style={{
+                width: i === clockStyle ? 18 : 6, height: 6, borderRadius: 3,
+                background: i === clockStyle ? "#f0ede8" : "rgba(255,255,255,0.35)",
+                transition: "all 0.3s"
+              }}/>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {uiVisible && (
           <motion.button
@@ -417,7 +470,124 @@ function FSPreview({ onClose }) {
   );
 }
 
-// ─── AMBIENCE CARDS (2-col grid) ─────────────────────────────────────────────
+// ─── FLIP CLOCK ──────────────────────────────────────────────────────────────
+function FlipCard({ value, size, ampm }) {
+  const [current, setCurrent] = useState(value);
+  const [next,    setNext]    = useState(value);
+  const [flipping, setFlipping] = useState(false);
+
+  useEffect(() => {
+    if (value === current) return;
+    setNext(value);
+    setFlipping(true);
+    const t = setTimeout(() => {
+      setCurrent(value);
+      setFlipping(false);
+    }, 420);
+    return () => clearTimeout(t);
+  }, [value]);
+
+  const w = size, h = size, r = size * 0.08, fs = size * 0.52;
+  const numStyle = { fontSize: fs, fontWeight: 800, color: "#fff", lineHeight: 1, fontFamily: "'Outfit','DM Sans',sans-serif", userSelect:"none", letterSpacing:"-0.02em" };
+  const glassBg  = "rgba(30,30,30,0.55)";
+  const glassStyle = { backdropFilter:"blur(24px) saturate(160%)", WebkitBackdropFilter:"blur(24px) saturate(160%)", border:"1px solid rgba(255,255,255,0.08)" };
+
+  return (
+    <div style={{ width: w, height: h, position: "relative", perspective: 800 }}>
+
+      {/* TOP STATIC — upper half of current digit */}
+      <div style={{
+        position:"absolute", top:0, left:0, width:w, height: h/2,
+        ...glassStyle, background:glassBg, borderRadius:`${r}px ${r}px 0 0`,
+        overflow:"hidden", display:"flex", alignItems:"flex-end", justifyContent:"center",
+      }}>
+        <span style={{...numStyle, transform:`translateY(50%)`}}>{current}</span>
+      </div>
+
+      {/* BOTTOM STATIC — lower half of next digit (revealed after flip) */}
+      <div style={{
+        position:"absolute", bottom:0, left:0, width:w, height: h/2,
+        ...glassStyle, background:glassBg, borderRadius:`0 0 ${r}px ${r}px`,
+        overflow:"hidden", display:"flex", alignItems:"flex-start", justifyContent:"center",
+      }}>
+        <span style={{...numStyle, transform:`translateY(-50%)`}}>{next}</span>
+      </div>
+
+      {/* FLIP TOP — folds down (0° → -90°), shows old top half */}
+      {flipping && (
+        <motion.div
+          initial={{ rotateX: 0 }} animate={{ rotateX: -90 }}
+          transition={{ duration: 0.21, ease: "easeIn" }}
+          style={{
+            position:"absolute", top:0, left:0, width:w, height: h/2,
+            ...glassStyle, background:glassBg, borderRadius:`${r}px ${r}px 0 0`,
+            overflow:"hidden", transformOrigin:"50% 100%",
+            display:"flex", alignItems:"flex-end", justifyContent:"center",
+            zIndex:3,
+          }}>
+          <span style={{...numStyle, transform:`translateY(50%)`}}>{current}</span>
+        </motion.div>
+      )}
+
+      {/* FLIP BOTTOM — unfolds down (90° → 0°), shows new bottom half */}
+      {flipping && (
+        <motion.div
+          initial={{ rotateX: 90 }} animate={{ rotateX: 0 }}
+          transition={{ duration: 0.21, ease: "easeOut", delay: 0.21 }}
+          style={{
+            position:"absolute", bottom:0, left:0, width:w, height: h/2,
+            ...glassStyle, background:glassBg, borderRadius:`0 0 ${r}px ${r}px`,
+            overflow:"hidden", transformOrigin:"50% 0%",
+            display:"flex", alignItems:"flex-start", justifyContent:"center",
+            zIndex:3,
+          }}>
+          <span style={{...numStyle, transform:`translateY(-50%)`}}>{next}</span>
+        </motion.div>
+      )}
+
+      {/* Center seam */}
+      <div style={{ position:"absolute", top:"50%", left:0, right:0, height:3, background:"#000", zIndex:4, transform:"translateY(-50%)" }}/>
+      {/* Left screw */}
+      <div style={{ position:"absolute", top:"50%", left:w*0.07, transform:"translateY(-50%)", zIndex:5,
+        width:w*0.06, height:w*0.06, borderRadius:"50%", background:"#2e2e2e", border:"1.5px solid #444" }}/>
+      {/* Right screw */}
+      <div style={{ position:"absolute", top:"50%", right:w*0.07, transform:"translateY(-50%)", zIndex:5,
+        width:w*0.06, height:w*0.06, borderRadius:"50%", background:"#2e2e2e", border:"1.5px solid #444" }}/>
+      {ampm && (
+        <span style={{
+          position:"absolute", bottom: w*0.07, left: w*0.09, zIndex:6,
+          fontSize: w*0.12, fontWeight:500, color:"rgba(255,255,255,0.45)",
+          fontFamily:"'Outfit',sans-serif", letterSpacing:"0.08em"
+        }}>{ampm}</span>
+      )}
+    </div>
+  );
+}
+
+function FlipClock({ cardSize, isTimer, timerDisplay, clock, phonePortrait }) {
+  const gap = phonePortrait ? cardSize * 0.06 : cardSize * 0.1;
+
+  if (isTimer) {
+    const [mm, ss] = timerDisplay.split(":");
+    return (
+      <div style={{ display:"flex", flexDirection: phonePortrait?"column":"row", alignItems:"center", gap }}>
+        <FlipCard value={mm} size={phonePortrait ? cardSize*1.6 : cardSize}/>
+        <FlipCard value={ss} size={phonePortrait ? cardSize*1.6 : cardSize}/>
+      </div>
+    );
+  }
+
+  const hStr = String(clock.rawH).padStart(2,"0");
+  const mStr = String(clock.rawM).padStart(2,"0");
+  return (
+    <div style={{ display:"flex", flexDirection: phonePortrait?"column":"row", alignItems:"center", gap }}>
+      <FlipCard value={hStr} size={phonePortrait ? cardSize*1.6 : cardSize} ampm={clock.ampm}/>
+      <FlipCard value={mStr} size={phonePortrait ? cardSize*1.6 : cardSize}/>
+    </div>
+  );
+}
+
+
 function AmbienceGrid({ cardH=100, count=6 }) {
   const backgrounds = useStore((s) => s.backgrounds);
   const current     = useStore((s) => s.currentBackground);
@@ -1107,59 +1277,75 @@ export default function App() {
     document.head.appendChild(link);
   }, []);
 
-  // WakeLock — prevent screen from sleeping while app is open
+  // WakeLock — keep screen on while app is visible, release when hidden/closed
   const wakeLockRef = useRef(null);
 
   useEffect(() => {
     let destroyed = false;
 
+    const releaseLock = async () => {
+      if (wakeLockRef.current) {
+        try { await wakeLockRef.current.release(); } catch(e) {}
+        wakeLockRef.current = null;
+      }
+    };
+
     const requestWakeLock = async () => {
       if (destroyed) return;
+      if (!("wakeLock" in navigator)) return;
+      if (document.visibilityState !== "visible") return; // never acquire when hidden
       try {
-        if (!("wakeLock" in navigator)) return;
-        // Release existing before re-acquiring
-        if (wakeLockRef.current) {
-          try { await wakeLockRef.current.release(); } catch(e) {}
-          wakeLockRef.current = null;
-        }
+        await releaseLock(); // clean slate
+        if (destroyed) return;
         const lock = await navigator.wakeLock.request("screen");
-        if (destroyed) { lock.release().catch(()=>{}); return; }
+        if (destroyed || document.visibilityState !== "visible") {
+          lock.release().catch(()=>{});
+          return;
+        }
         wakeLockRef.current = lock;
-        // Re-acquire if system releases it (e.g. tab hidden then visible again)
+        // Re-acquire only if still visible when system releases
         lock.addEventListener("release", () => {
           if (!destroyed && document.visibilityState === "visible") {
-            requestWakeLock();
+            setTimeout(requestWakeLock, 500); // small delay before re-acquire
           }
-        });
+        }, { once: true }); // once: true prevents listener stacking
       } catch(e) {}
     };
 
-    requestWakeLock();
-
-    // Re-acquire when tab becomes visible again
     const onVisibility = () => {
-      if (document.visibilityState === "visible") requestWakeLock();
+      if (document.visibilityState === "visible") {
+        requestWakeLock(); // re-acquire when coming back
+      } else {
+        releaseLock(); // release immediately when tab hidden / screen off
+      }
     };
-    // Re-acquire after fullscreen change — browser releases WakeLock on fullscreen enter/exit
+
+    // Re-acquire after fullscreen transition (browser drops lock on fullscreen change)
     const onFullscreen = () => {
       setTimeout(() => {
         if (!destroyed && document.visibilityState === "visible") requestWakeLock();
-      }, 300);
+      }, 400);
     };
+
+    // Release on page unload / tab close
+    const onUnload = () => releaseLock();
+
+    requestWakeLock();
 
     document.addEventListener("visibilitychange", onVisibility);
     document.addEventListener("fullscreenchange", onFullscreen);
     document.addEventListener("webkitfullscreenchange", onFullscreen);
+    window.addEventListener("pagehide", onUnload);
+    window.addEventListener("beforeunload", onUnload);
 
     return () => {
       destroyed = true;
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("fullscreenchange", onFullscreen);
       document.removeEventListener("webkitfullscreenchange", onFullscreen);
-      if (wakeLockRef.current) {
-        wakeLockRef.current.release().catch(() => {});
-        wakeLockRef.current = null;
-      }
+      window.removeEventListener("pagehide", onUnload);
+      window.removeEventListener("beforeunload", onUnload);
+      releaseLock();
     };
   }, []);
 
