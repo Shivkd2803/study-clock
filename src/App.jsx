@@ -529,10 +529,11 @@ function ExploreModal({ onClose, desktop=false }) {
 
   if (desktop) {
     return (
-      <motion.div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 backdrop-blur-xl"
+      <motion.div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 backdrop-blur-sm"
         initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
         <motion.div initial={{scale:0.92,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.92,opacity:0}} transition={{duration:0.25}}
-          className="w-[85vw] max-w-[1100px] max-h-[88vh] bg-[#0c130c]/98 backdrop-blur-2xl rounded-[36px] border border-white/10 flex flex-col overflow-hidden">
+          className="w-[85vw] max-w-[1100px] max-h-[88vh] rounded-[36px] border border-white/15 flex flex-col overflow-hidden"
+          style={{background:"rgba(255,255,255,0.07)", backdropFilter:"blur(40px) saturate(160%)", WebkitBackdropFilter:"blur(40px) saturate(160%)", boxShadow:"0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12)"}}>
           <div className="flex items-start justify-between px-10 pt-9 pb-5 flex-shrink-0">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-xl bg-[#f0ede8]/15 flex items-center justify-center">
