@@ -109,24 +109,34 @@ function ModePill({ sz = "md", onSetTime }) {
   const setShortTimer = useStore((s) => s.setShortTimer);
   const iconSz  = sz === "lg" ? 26 : sz === "sm" ? 19 : 22;
   const txtCls  = sz === "lg" ? "text-sm" : sz === "sm" ? "text-[10px]" : "text-xs";
-  const pyCls   = sz === "lg" ? "py-5"   : sz === "sm" ? "py-2.5"      : "py-3.5";
+  const pyCls   = sz === "lg" ? "py-3"   : sz === "sm" ? "py-1.5"      : "py-2.5";
   const rCls    = sz === "lg" ? "rounded-[22px]" : "rounded-[18px]";
+  const tabs = [
+    { key:"clock", label:"Live Clock",  Ico:IcoClock },
+    { key:"short", label:"Short Timer", Ico:IcoTimer },
+    { key:"long",  label:"Set Time",    Ico:IcoCal   },
+  ];
   return (
-    <div className={`flex bg-black/45 backdrop-blur-2xl ${rCls} border border-white/10 p-1.5 gap-1`}>
-      {[
-        { key:"clock", label:"Live Clock",  Ico:IcoClock },
-        { key:"short", label:"Short Timer", Ico:IcoTimer },
-        { key:"long",  label:"Set Time",    Ico:IcoCal   },
-      ].map(({ key, label, Ico }) => (
+    <div className={`relative flex bg-black/45 backdrop-blur-2xl ${rCls} border border-white/10 p-1.5 gap-1`}>
+      {tabs.map(({ key, label, Ico }) => (
         <button key={key}
           onClick={() => {
             if (key === "long") { onSetTime(); }
             else if (key === "short") { setShortTimer(); }
             else { setMode(key); }
           }}
-          className={`flex-1 flex flex-col items-center gap-1.5 ${pyCls} ${rCls} transition-all ${
-            mode === key ? "bg-[#f0ede8]/20 text-[#f0ede8] border border-[#f0ede8]/30" : "text-white/65 hover:text-white"
+          className={`relative flex-1 flex flex-col items-center gap-1.5 ${pyCls} ${rCls} transition-colors duration-200 z-10 ${
+            mode === key ? "text-[#f0ede8]" : "text-white/65 hover:text-white"
           }`}>
+          {/* Sliding background pill */}
+          {mode === key && (
+            <motion.div
+              layoutId="modePillSlider"
+              className={`absolute inset-0 ${rCls}`}
+              style={{ background: "rgba(240,237,232,0.18)", border: "1px solid rgba(240,237,232,0.28)" }}
+              transition={{ type: "spring", stiffness: 400, damping: 35 }}
+            />
+          )}
           {Ico(iconSz)}
           <span className={`${txtCls} font-medium`}>{label}</span>
           {mode === key && <div className="w-5 h-0.5 bg-[#f0ede8] rounded-full"/>}
@@ -278,6 +288,19 @@ function FSPreview({ onClose }) {
     };
   }, []);
 
+  // Auto-hide UI after 3s idle, reappear on touch/mousemove
+  const [uiVisible, setUiVisible] = useState(true);
+  const hideTimerRef = useRef(null);
+  const resetHideTimer = () => {
+    setUiVisible(true);
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setUiVisible(false), 3000);
+  };
+  useEffect(() => {
+    resetHideTimer();
+    return () => clearTimeout(hideTimerRef.current);
+  }, []);
+
   // Double-tap to close (touch) / double-click (mouse)
   const lastTouchFSRef = useRef(0);
   useEffect(() => {
@@ -340,7 +363,8 @@ function FSPreview({ onClose }) {
 
   return (
     <motion.div ref={containerRef} className="fixed inset-0 z-[2000] bg-black overflow-hidden"
-      initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.3}}>
+      initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.3}}
+      onMouseMove={resetHideTimer} onTouchStart={resetHideTimer}>
       <div className="absolute inset-0">
         {bg && (
           <video autoPlay loop muted playsInline controls={false} disablePictureInPicture className="w-full h-full object-cover">
@@ -371,11 +395,24 @@ function FSPreview({ onClose }) {
           <span className="text-white font-bold drop-shadow-lg" style={{fontSize:timerFs,lineHeight:1}}>{fsTimerDisplay}</span>
         </div>
       )}
-      <motion.button initial={{opacity:0}} animate={{opacity:1}} transition={{delay:0.5}}
-        onClick={handleClose}
-        className="absolute top-5 right-5 z-20 w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center text-white/80 hover:bg-black/60 hover:text-white transition-all">
-        {IcoCompress(18)}
-      </motion.button>
+      <AnimatePresence>
+        {uiVisible && (
+          <motion.button
+            key="fs-close-btn"
+            initial={{opacity:0, scale:0.85}} animate={{opacity:1, scale:1}} exit={{opacity:0, scale:0.85}}
+            transition={{duration:0.25}}
+            onClick={handleClose}
+            className="absolute bottom-5 left-5 z-20 flex items-center justify-center text-white transition-all active:scale-90"
+            style={{ background: "none", border: "none", padding: 8, filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.6))" }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 14 10 14 10 20"/>
+              <polyline points="20 10 14 10 14 4"/>
+              <line x1="10" y1="14" x2="3" y2="21"/>
+              <line x1="21" y1="3" x2="14" y2="10"/>
+            </svg>
+          </motion.button>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -430,7 +467,16 @@ function AmbienceRow({ cardW=150, cardH=105, count=8, onViewAll, labelSize="sm" 
   const backgrounds   = useStore((s) => s.backgrounds);
   const current       = useStore((s) => s.currentBackground);
   const setBackground = useStore((s) => s.setBackground);
-  const all = [...backgrounds.map((b,i)=>({...b,storeIndex:i})),...EXTRA_BGS].slice(0,count);
+  const recentBackgrounds = useStore((s) => s.recentBackgrounds);
+  const allBgs = [...backgrounds.map((b,i)=>({...b,storeIndex:i})),...EXTRA_BGS];
+  const all = [...allBgs].sort((a, b) => {
+    const ai = recentBackgrounds.indexOf(a.name);
+    const bi = recentBackgrounds.indexOf(b.name);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  }).slice(0, count);
   return (
     <div>
       <div className={`flex items-center justify-between mb-3 ${labelSize==="lg"?"px-0":""}`}>
@@ -659,12 +705,20 @@ function DesktopSidebar({ open, onClose, onViewAll }) {
   const backgrounds   = useStore((s) => s.backgrounds);
   const current       = useStore((s) => s.currentBackground);
   const setBackground = useStore((s) => s.setBackground);
+  const recentBackgrounds = useStore((s) => s.recentBackgrounds);
 
-  const all = [...backgrounds.map((b,i)=>({...b,storeIndex:i})),...EXTRA_BGS];
-  // Show 6 total: 1 "No Background" slot + 5 real ambiences
+  const allBgs = [...backgrounds.map((b,i)=>({...b,storeIndex:i})),...EXTRA_BGS];
   const INITIAL = 6;
-  const visible = all.slice(0, INITIAL - 1);
-  const hasMore = all.length > INITIAL - 1;
+  const sorted = [...allBgs].sort((a, b) => {
+    const ai = recentBackgrounds.indexOf(a.name);
+    const bi = recentBackgrounds.indexOf(b.name);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+  const visible = sorted.slice(0, INITIAL - 1);
+  const hasMore = allBgs.length > INITIAL - 1;
 
   return (
     <AnimatePresence>
@@ -684,15 +738,16 @@ function DesktopSidebar({ open, onClose, onViewAll }) {
             transition={{ type: "spring", damping: 28, stiffness: 260 }}
             style={{
               width: 360,
-              background: "rgba(8,13,8,0.88)",
-              backdropFilter: "blur(32px)",
-              WebkitBackdropFilter: "blur(32px)",
-              borderLeft: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(15,20,15,0.45)",
+              backdropFilter: "blur(48px) saturate(180%)",
+              WebkitBackdropFilter: "blur(48px) saturate(180%)",
+              borderLeft: "1px solid rgba(255,255,255,0.18)",
+              boxShadow: "-8px 0 40px rgba(0,0,0,0.35), inset 1px 0 0 rgba(255,255,255,0.08)",
             }}>
 
             {/* Header */}
             <div className="flex items-center justify-between flex-shrink-0"
-              style={{ padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+              style={{ padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)" }}>
               <span className="text-white text-xs font-bold tracking-widest uppercase">Immersive Ambiences</span>
               <button onClick={onClose}
                 className="w-8 h-8 rounded-xl flex items-center justify-center text-white/50 hover:text-white transition-all"
@@ -798,7 +853,13 @@ function unlockAudio() { try { getAudioCtx(); } catch(e) {} }
 
 function useTimerEndBeep(time, mode) {
   const beeped = useRef(false);
+  const prevMode = useRef(mode);
   useEffect(() => {
+    // Reset beeped whenever mode changes so each timer gets its own beep
+    if (prevMode.current !== mode) {
+      beeped.current = false;
+      prevMode.current = mode;
+    }
     if ((mode === "short" || mode === "long") && time === 0 && !beeped.current) {
       beeped.current = true;
       try {
@@ -849,14 +910,14 @@ function MainLayout() {
     : `${String(timerMins).padStart(2,"0")}:${String(timerSecs).padStart(2,"0")}`;
 
   // Breakpoints
-  const isPhone   = w < 640;
-  const isTablet  = w >= 640  && w < 1100;
-  const isDesktop = w >= 1100;
-
-  // Phone clock font — large to fill screen like design
   const isPortrait = h > w;
+  const isPhoneLandscape = !isPortrait && h < 500; // phone rotated sideways
+  const isTabletLandscape = !isPortrait && h >= 500 && w < 1100; // tablet rotated sideways
+  const isPhone   = w < 640 && isPortrait;         // portrait phone only
+  const isTablet  = (w >= 640 && w < 1100) && isPortrait; // tablet portrait only
+  const isDesktop = w >= 1100 || isPhoneLandscape || isTabletLandscape; // pc + any landscape tablet/phone
   const clockFs = isPhone
-    ? Math.min(w * 0.30, 160)
+    ? Math.min(w * 0.36, 190)
     : isTablet
     ? (isPortrait ? Math.min(w * 0.19, 210) : Math.min(w * 0.24, 280))
     : Math.min(w * 0.105, 180);
@@ -931,10 +992,26 @@ function MainLayout() {
         <div className="min-h-full flex flex-col" style={{paddingBottom: isPhone ? 16 : 24}}>
 
           {/* TRANSLUCENT NAV BAR — all sizes */}
-          <NavBar isLarge={!isPhone} isPhoneLandscape={isPhone && w > h} isDesktop={isDesktop} onHamburger={() => setShowSidebar(true)}/>
+          <NavBar isLarge={!isPhone} isPhoneLandscape={isPhoneLandscape} isDesktop={isDesktop} onHamburger={() => setShowSidebar(true)}/>
+
+          {/* FULLSCREEN ZOOM BUTTON — below navbar, left corner */}
+          <div style={{padding: isPhone?"6px 16px":"8px 20px"}}>
+            <motion.button
+              whileTap={{scale:0.88}}
+              onClick={()=>setShowFSPreview(true)}
+              className="flex items-center justify-center text-white/70 hover:text-white transition-all"
+              style={{background:"none", border:"none", padding:4, filter:"drop-shadow(0 2px 5px rgba(0,0,0,0.6))"}}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"/>
+                <polyline points="9 21 3 21 3 15"/>
+                <line x1="21" y1="3" x2="14" y2="10"/>
+                <line x1="3" y1="21" x2="10" y2="14"/>
+              </svg>
+            </motion.button>
+          </div>
 
           {/* CLOCK — flex-1 centers it in remaining space */}
-          <div className="flex-1 flex items-center justify-center" style={{minHeight: isPhone?"38vh":isTablet?"40vh":"44vh"}}>
+          <div className="flex-1 flex items-center justify-center" style={{minHeight: isPhone?"46vh":isTablet?"40vh":"44vh"}}>
             {mode==="clock" ? (
               isPhone ? (
                 <div className="flex items-center justify-center w-full">
@@ -983,8 +1060,10 @@ function MainLayout() {
           </div>
 
           {/* MODE PILL */}
-          <div style={{padding: isPhone?"0 16px 12px" : isTablet?"0 28px 14px":"0 40px 14px"}}>
-            <ModePill sz={isPhone?"sm":isDesktop?"lg":"md"} onSetTime={()=>setShowSetTime(true)}/>
+          <div style={{padding: isPhone?"0 16px 12px" : isTablet?"0 28px 14px":"0 40px 14px", display:"flex", justifyContent:"center", marginBottom: isPhone?"12px": isTablet?"20px":"28px"}}>
+            <div style={{width: isPhone?"100%": isTablet?"560px":"660px"}}>
+              <ModePill sz={isPhone?"sm":isDesktop?"lg":"md"} onSetTime={()=>setShowSetTime(true)}/>
+            </div>
           </div>
 
           {/* IMMERSIVE AMBIENCES — frosted glass card (phone & tablet only; desktop uses sidebar) */}
@@ -1012,7 +1091,7 @@ function MainLayout() {
 
       <AnimatePresence>{showSetTime   && <SetTimeSheet onClose={()=>setShowSetTime(false)}/>}</AnimatePresence>
       <AnimatePresence>{showFSPreview && <FSPreview    onClose={()=>setShowFSPreview(false)}/>}</AnimatePresence>
-      <AnimatePresence>{showExplore   && <ExploreModal onClose={()=>setShowExplore(false)} desktop={isDesktop}/>}</AnimatePresence>
+      <AnimatePresence>{showExplore   && <ExploreModal onClose={()=>setShowExplore(false)} desktop={true}/>}</AnimatePresence>
       {isDesktop && <DesktopSidebar open={showSidebar} onClose={()=>setShowSidebar(false)} onViewAll={()=>setShowExplore(true)}/>}
     </div>
   );
@@ -1028,27 +1107,54 @@ export default function App() {
   }, []);
 
   // WakeLock — prevent screen from sleeping while app is open
+  const wakeLockRef = useRef(null);
+
   useEffect(() => {
-    const wakeLockRef = { current: null };
+    let destroyed = false;
+
     const requestWakeLock = async () => {
+      if (destroyed) return;
       try {
-        if ("wakeLock" in navigator) {
-          if (wakeLockRef.current) {
-            try { await wakeLockRef.current.release(); } catch(e) {}
-          }
-          wakeLockRef.current = await navigator.wakeLock.request("screen");
-          wakeLockRef.current.addEventListener("release", () => {
-            // Auto re-acquire if released by system (e.g. tab switch back)
-            if (document.visibilityState === "visible") requestWakeLock();
-          });
+        if (!("wakeLock" in navigator)) return;
+        // Release existing before re-acquiring
+        if (wakeLockRef.current) {
+          try { await wakeLockRef.current.release(); } catch(e) {}
+          wakeLockRef.current = null;
         }
+        const lock = await navigator.wakeLock.request("screen");
+        if (destroyed) { lock.release().catch(()=>{}); return; }
+        wakeLockRef.current = lock;
+        // Re-acquire if system releases it (e.g. tab hidden then visible again)
+        lock.addEventListener("release", () => {
+          if (!destroyed && document.visibilityState === "visible") {
+            requestWakeLock();
+          }
+        });
       } catch(e) {}
     };
+
     requestWakeLock();
-    const onVisible = () => { if (document.visibilityState === "visible") requestWakeLock(); };
-    document.addEventListener("visibilitychange", onVisible);
+
+    // Re-acquire when tab becomes visible again
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") requestWakeLock();
+    };
+    // Re-acquire after fullscreen change — browser releases WakeLock on fullscreen enter/exit
+    const onFullscreen = () => {
+      setTimeout(() => {
+        if (!destroyed && document.visibilityState === "visible") requestWakeLock();
+      }, 300);
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("fullscreenchange", onFullscreen);
+    document.addEventListener("webkitfullscreenchange", onFullscreen);
+
     return () => {
-      document.removeEventListener("visibilitychange", onVisible);
+      destroyed = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("fullscreenchange", onFullscreen);
+      document.removeEventListener("webkitfullscreenchange", onFullscreen);
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {});
         wakeLockRef.current = null;
