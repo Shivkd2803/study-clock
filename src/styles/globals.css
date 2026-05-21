@@ -13,7 +13,7 @@ body {
   padding: 0;
   background: #080d08;
   font-family: 'DM Sans', sans-serif;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 /* Hide scrollbar */

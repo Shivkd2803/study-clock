@@ -71,7 +71,7 @@ function NavBar({ isLarge = false, isPhoneLandscape = false, isDesktop = false, 
   return (
     <div className="flex-shrink-0 flex items-center justify-between"
       style={{
-        padding: slim ? "10px 20px 8px" : isLarge ? "20px 28px 16px" : "16px 16px 10px",
+        padding: slim ? "10px 20px 8px" : isLarge ? "20px 28px 16px" : "22px 16px 10px",
         background: "rgba(0,0,0,0.25)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
@@ -1277,12 +1277,47 @@ export default function App() {
     document.head.appendChild(link);
   }, []);
 
-  // WakeLock — keep screen on while app is visible, release when hidden/closed
-  const wakeLockRef = useRef(null);
+  // WakeLock — dual strategy:
+  // 1. Screen Wake Lock API (Chrome/Android/desktop, iOS 17+ PWA)
+  // 2. Invisible looping video hack (iOS Safari fallback — keeps screen awake)
+  const wakeLockRef  = useRef(null);
+  const noSleepVideo = useRef(null);
 
   useEffect(() => {
     let destroyed = false;
 
+    // ── Invisible video trick (iOS Safari / older browsers) ──────────────────
+    // A tiny 1-frame looping video prevents iOS from sleeping
+    const startNoSleepVideo = () => {
+      if (!noSleepVideo.current) {
+        const vid = document.createElement("video");
+        vid.setAttribute("playsinline", "");
+        vid.setAttribute("muted", "");
+        vid.muted = true;
+        vid.loop = true;
+        vid.style.cssText = "position:fixed;top:-1px;left:-1px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;";
+        vid.src = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAA2BtZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0MiByMjQ3OSBkZDc5YTYxIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxNCAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTYgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0zIGJfcHlyYW1pZD0yIGJfYWRhcHQ9MSBiX2JpYXM9MCBkaXJlY3Q9MSB3ZWlnaHRiPTEgb3Blbl9nb3A9MCB3ZWlnaHRwPTIga2V5aW50PTI1MCBrZXlpbnRfbWluPTI1IHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9NDAgcmM9Y3JmIG1idHJlZT0xIGNyZj0yMy4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4wMACAAAABZWWIhAAv//72rvzLK0cLlS4teMinaHc4i4TNvQAAAkABAAAAAwBhAAADAALhU0UAAAADAAADAAADAGQAAAMBAAAAAgMAAAADAMgAAAMAAAADAEAAAAMAAAACAQAAAAMAAAACAgAAAAMAAAABAwAAAAMAAAABBAAAAAMAAAABBQAAAAMAAAABBgAAAAMAAAABBwAAAAMAAAABCAAAAAMAAAABCQAAAAMAAAABCgAAAAMAAAABCwAAAAMAAAABDAAAAAMAAAABDQAAAAMAAAABDgAAAAMAAAABDwAAAAMAAAABEA==";
+        document.body.appendChild(vid);
+        noSleepVideo.current = vid;
+      }
+      // play() — on visibility restore this works without new gesture on most browsers
+      noSleepVideo.current.play().catch(() => {});
+    };
+
+    const stopNoSleepVideo = () => {
+      // Only pause — keep element alive so visibility restore can resume without gesture
+      if (noSleepVideo.current) noSleepVideo.current.pause();
+    };
+
+    const destroyNoSleepVideo = () => {
+      if (noSleepVideo.current) {
+        noSleepVideo.current.pause();
+        noSleepVideo.current.remove();
+        noSleepVideo.current = null;
+      }
+    };
+
+    // ── Screen Wake Lock API ─────────────────────────────────────────────────
     const releaseLock = async () => {
       if (wakeLockRef.current) {
         try { await wakeLockRef.current.release(); } catch(e) {}
@@ -1291,59 +1326,66 @@ export default function App() {
     };
 
     const requestWakeLock = async () => {
-      if (destroyed) return;
+      if (destroyed || document.visibilityState !== "visible") return;
+      if (wakeLockRef.current) return;
       if (!("wakeLock" in navigator)) return;
-      if (document.visibilityState !== "visible") return; // never acquire when hidden
       try {
-        await releaseLock(); // clean slate
-        if (destroyed) return;
         const lock = await navigator.wakeLock.request("screen");
-        if (destroyed || document.visibilityState !== "visible") {
-          lock.release().catch(()=>{});
-          return;
-        }
+        if (destroyed || document.visibilityState !== "visible") { lock.release().catch(()=>{}); return; }
         wakeLockRef.current = lock;
-        // Re-acquire only if still visible when system releases
         lock.addEventListener("release", () => {
-          if (!destroyed && document.visibilityState === "visible") {
-            setTimeout(requestWakeLock, 500); // small delay before re-acquire
-          }
-        }, { once: true }); // once: true prevents listener stacking
+          wakeLockRef.current = null;
+          if (!destroyed && document.visibilityState === "visible") setTimeout(requestWakeLock, 500);
+        }, { once: true });
       } catch(e) {}
+    };
+
+    // ── Activate both on first user interaction ──────────────────────────────
+    const activate = () => {
+      startNoSleepVideo(); // iOS fallback — must be triggered by user gesture
+      requestWakeLock();   // API-based — for Android/desktop
     };
 
     const onVisibility = () => {
       if (document.visibilityState === "visible") {
-        requestWakeLock(); // re-acquire when coming back
+        startNoSleepVideo();
+        requestWakeLock();
       } else {
-        releaseLock(); // release immediately when tab hidden / screen off
+        stopNoSleepVideo();
+        releaseLock();
       }
     };
 
-    // Re-acquire after fullscreen transition (browser drops lock on fullscreen change)
     const onFullscreen = () => {
       setTimeout(() => {
         if (!destroyed && document.visibilityState === "visible") requestWakeLock();
       }, 400);
     };
 
-    // Release on page unload / tab close
-    const onUnload = () => releaseLock();
+    const onUnload = () => { destroyNoSleepVideo(); releaseLock(); };
 
+    // Try WakeLock immediately (works without gesture on desktop/Android)
     requestWakeLock();
 
+    // Video + WakeLock retry on first touch/click (required for iOS)
+    document.addEventListener("touchstart", activate, { once: true });
+    document.addEventListener("click",      activate, { once: true });
+
     document.addEventListener("visibilitychange", onVisibility);
-    document.addEventListener("fullscreenchange", onFullscreen);
-    document.addEventListener("webkitfullscreenchange", onFullscreen);
-    window.addEventListener("pagehide", onUnload);
+    document.addEventListener("fullscreenchange",        onFullscreen);
+    document.addEventListener("webkitfullscreenchange",  onFullscreen);
+    window.addEventListener("pagehide",     onUnload);
     window.addEventListener("beforeunload", onUnload);
 
     return () => {
       destroyed = true;
-      document.removeEventListener("visibilitychange", onVisibility);
-      document.removeEventListener("fullscreenchange", onFullscreen);
-      document.removeEventListener("webkitfullscreenchange", onFullscreen);
-      window.removeEventListener("pagehide", onUnload);
+      destroyNoSleepVideo();
+      document.removeEventListener("touchstart",            activate);
+      document.removeEventListener("click",                 activate);
+      document.removeEventListener("visibilitychange",      onVisibility);
+      document.removeEventListener("fullscreenchange",      onFullscreen);
+      document.removeEventListener("webkitfullscreenchange",onFullscreen);
+      window.removeEventListener("pagehide",     onUnload);
       window.removeEventListener("beforeunload", onUnload);
       releaseLock();
     };
