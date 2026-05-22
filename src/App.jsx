@@ -94,9 +94,9 @@ function NavBar({ isLarge = false, isPhoneLandscape = false, isDesktop = false, 
         <button
           onClick={onHamburger}
           className="w-9 h-9 flex flex-col items-center justify-center gap-1.5 text-white/80 hover:text-white transition-all">
-          <span className="w-4 h-0.5 bg-current rounded-full"/>
-          <span className="w-4 h-0.5 bg-current rounded-full"/>
-          <span className="w-4 h-0.5 bg-current rounded-full"/>
+          <span className="w-4 bg-current rounded-full" style={{height:2}}/>
+          <span className="w-4 bg-current rounded-full" style={{height:2}}/>
+          <span className="w-4 bg-current rounded-full" style={{height:2}}/>
         </button>
       )}
     </div>
@@ -147,34 +147,166 @@ function ModePill({ sz = "md", onSetTime }) {
 }
 
 // ─── SET TIME SHEET ───────────────────────────────────────────────────────────
+function ScrollDrum({ value, max, onChange }) {
+  const ITEM_H = 64;
+  const count = max + 1;
+  const REPS = 40;
+  const MID_OFFSET = Math.floor(REPS / 2) * count;
+  const containerRef = useRef(null);
+  const programmatic = useRef(false);
+  const [typing, setTyping] = useState(false);
+  const [typed, setTyped] = useState("");
+  const inputRef = useRef(null);
+
+  const scrollToVal = (val, smooth = false) => {
+    if (!containerRef.current) return;
+    programmatic.current = true;
+    containerRef.current.scrollTo({
+      top: (MID_OFFSET + val) * ITEM_H,
+      behavior: smooth ? "smooth" : "auto",
+    });
+    setTimeout(() => { programmatic.current = false; }, 100);
+  };
+
+  useEffect(() => { scrollToVal(value); }, []);
+
+  const handleScroll = () => {
+    if (programmatic.current || !containerRef.current) return;
+    const idx = Math.round(containerRef.current.scrollTop / ITEM_H);
+    const newVal = ((idx % count) + count) % count;
+    if (newVal !== value) onChange(newVal);
+    if (Math.abs(idx - (MID_OFFSET + newVal)) > count * 5) {
+      programmatic.current = true;
+      containerRef.current.scrollTop = (MID_OFFSET + newVal) * ITEM_H;
+      setTimeout(() => { programmatic.current = false; }, 50);
+    }
+  };
+
+  const commitTyped = (str) => {
+    const n = parseInt(str);
+    if (!isNaN(n) && str !== "") {
+      const clamped = Math.min(max, Math.max(0, n));
+      onChange(clamped);
+      scrollToVal(clamped, true);
+    }
+    setTyping(false);
+    setTyped("");
+  };
+
+  const startTyping = () => {
+    setTyping(true);
+    setTyped("");
+    setTimeout(() => inputRef.current?.focus(), 30);
+  };
+
+  const items = Array.from({ length: count * REPS }, (_, i) => i % count);
+
+  return (
+    <div style={{ position:"relative", height: ITEM_H * 3, width:88, overflow:"hidden", borderRadius:14, flexShrink:0 }}>
+      {/* Highlight band — MIDDLE row */}
+      <div style={{
+        position:"absolute", top: ITEM_H, left:0, right:0, height: ITEM_H,
+        background:"rgba(240,237,232,0.1)", borderRadius:10,
+        border:"1px solid rgba(240,237,232,0.18)", pointerEvents:"none", zIndex:2,
+      }}/>
+      {/* Top fade */}
+      <div style={{
+        position:"absolute", top:0, left:0, right:0, height: ITEM_H,
+        background:"linear-gradient(to bottom, rgba(0,0,0,0.65), transparent)",
+        pointerEvents:"none", zIndex:3,
+      }}/>
+      {/* Bottom fade */}
+      <div style={{
+        position:"absolute", bottom:0, left:0, right:0, height: ITEM_H,
+        background:"linear-gradient(to top, rgba(0,0,0,0.65), transparent)",
+        pointerEvents:"none", zIndex:3,
+      }}/>
+
+      {/* Tap-to-type overlay on centre row only */}
+      <div
+        onClick={startTyping}
+        style={{
+          position:"absolute", top: ITEM_H, left:0, right:0, height: ITEM_H,
+          zIndex: typing ? 0 : 4, cursor:"text",
+        }}
+      />
+      {typing && (
+        <div style={{
+          position:"absolute", top: ITEM_H, left:0, right:0, height: ITEM_H,
+          zIndex:10, display:"flex", alignItems:"center", justifyContent:"center",
+          background:"rgba(240,237,232,0.12)", borderRadius:10,
+        }}>
+          <input
+            ref={inputRef}
+            type="tel"
+            inputMode="numeric"
+            value={typed}
+            onChange={e => {
+              const val = e.target.value.replace(/\D/g,"").slice(0,2);
+              setTyped(val);
+              if (val.length === 2) commitTyped(val);
+            }}
+            onBlur={() => commitTyped(typed)}
+            onKeyDown={e => {
+              if (e.key === "Enter") commitTyped(typed);
+              if (e.key === "Escape") { setTyping(false); setTyped(""); }
+            }}
+            placeholder={String(value).padStart(2,"0")}
+            style={{
+              width:"100%", height:"100%", textAlign:"center",
+              background:"transparent", border:"none", outline:"none",
+              color:"#fff", fontSize:42, fontWeight:700,
+              fontFamily:"'DM Sans',sans-serif", caretColor:"#f0ede8",
+            }}
+          />
+        </div>
+      )}
+
+      {/* Scroll list */}
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        onWheel={e => {
+          e.preventDefault();
+          if (!containerRef.current) return;
+          containerRef.current.scrollBy({ top: e.deltaY > 0 ? ITEM_H : -ITEM_H, behavior:"smooth" });
+        }}
+        style={{
+          height:"100%", overflowY:"scroll", scrollSnapType:"y mandatory",
+          scrollbarWidth:"none", msOverflowStyle:"none",
+          paddingTop: ITEM_H, paddingBottom: ITEM_H,
+          boxSizing:"content-box",
+        }}>
+        {items.map((val, i) => (
+          <div key={i} style={{
+            height: ITEM_H, display:"flex", alignItems:"center", justifyContent:"center",
+            scrollSnapAlign:"center", lineHeight:1,
+            fontSize: val === value ? 42 : 30,
+            fontWeight: 700, fontFamily:"'DM Sans',sans-serif",
+            color: val === value ? "#fff" : "rgba(255,255,255,0.28)",
+            transition:"font-size 0.12s, color 0.12s",
+          }}>
+            {String(val).padStart(2,"0")}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SetTimeSheet({ onClose }) {
-  const setMode = useStore((s) => s.setMode);
-  const setCT   = useStore((s) => s.setCustomTime);
-  const toggleRunning = useStore((s) => s.toggleRunning);
-  const [h, setH] = useState("");
-  const [m, setM] = useState("");
+  const [h, setH] = useState(0);
+  const [m, setM] = useState(0);
+
   const go = () => {
-    const hours = Math.min(23, parseInt(h) || 0);
-    const mins  = Math.min(59, parseInt(m) || 0);
-    const t = hours * 3600 + mins * 60;
+    const t = h * 3600 + m * 60;
     if (!t) return;
-    // Set time and mode but do NOT auto-start — user presses START on main screen
-    useStore.setState({ mode: "long", time: t, originalTime: t, running: false });
+    useStore.setState({ mode:"long", time:t, originalTime:t, running:false });
     onClose();
   };
 
-  // Format: only allow 0-99, show as 2-char padded when blurred
-  const handleH = (e) => {
-    const val = e.target.value.replace(/\D/g, "").slice(0, 2);
-    setH(val === "" ? "" : String(Math.min(23, parseInt(val))));
-  };
-  const handleM = (e) => {
-    const val = e.target.value.replace(/\D/g, "").slice(0, 2);
-    setM(val === "" ? "" : String(Math.min(59, parseInt(val))));
-  };
-
-  const displayH = h === "" ? "00" : String(parseInt(h) || 0).padStart(2, "0");
-  const displayM = m === "" ? "00" : String(parseInt(m) || 0).padStart(2, "0");
+  const displayH = String(h).padStart(2,"0");
+  const displayM = String(m).padStart(2,"0");
 
   return (
     <motion.div className="fixed inset-0 z-[900] flex items-end justify-center bg-black/60 backdrop-blur-sm"
@@ -186,45 +318,19 @@ function SetTimeSheet({ onClose }) {
         <div className="w-10 h-1 bg-white/20 rounded-full"/>
         <h2 className="text-white text-2xl font-bold">Set Timer</h2>
 
-        {/* HH : MM display */}
-        <div className="flex items-end gap-3">
-          {/* Hours */}
-          <div className="flex flex-col items-center gap-2">
+        {/* Scroll drums */}
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
             <label className="text-white/40 text-xs tracking-widest uppercase">Hours</label>
-            <input
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={h}
-              onChange={handleH}
-              onFocus={() => setH("")}
-              onBlur={() => {}}
-              placeholder="00"
-              maxLength={2}
-              className="w-24 text-center text-5xl font-bold text-white bg-white/5 rounded-2xl py-3 border border-white/10 focus:outline-none focus:border-[#f0ede8]/60 placeholder-white/30"
-            />
+            <ScrollDrum value={h} max={23} onChange={setH}/>
           </div>
-
-          {/* Colon */}
-          <span className="text-white text-5xl font-bold pb-3 select-none">:</span>
-
-          {/* Minutes */}
-          <div className="flex flex-col items-center gap-2">
+          <span className="text-white text-5xl font-bold select-none" style={{marginTop:24}}>:</span>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
             <label className="text-white/40 text-xs tracking-widest uppercase">Minutes</label>
-            <input
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={m}
-              onChange={handleM}
-              onFocus={() => setM("")}
-              onBlur={() => {}}
-              placeholder="00"
-              maxLength={2}
-              className="w-24 text-center text-5xl font-bold text-white bg-white/5 rounded-2xl py-3 border border-white/10 focus:outline-none focus:border-[#f0ede8]/60 placeholder-white/30"
-            />
+            <ScrollDrum value={m} max={59} onChange={setM}/>
           </div>
         </div>
 
-        {/* Preview of what will be set */}
         <p className="text-white/40 text-sm">
           Timer will be set to <span className="text-[#f0ede8] font-semibold">{displayH}:{displayM}</span>
         </p>
@@ -302,14 +408,21 @@ function FSPreview({ onClose }) {
   }, []);
 
   // Clock style: 0 = normal, 1 = flip
-  const [clockStyle, setClockStyle] = useState(0);
+  const [clockStyle, setClockStyle] = useState(() => {
+    try { return parseInt(localStorage.getItem("lsc_last_clock_style")) || 0; } catch { return 0; }
+  });
+
+  const updateClockStyle = (newStyle) => {
+    setClockStyle(newStyle);
+    try { localStorage.setItem("lsc_last_clock_style", String(newStyle)); } catch {}
+  };
   const swipeStartX = useRef(null);
   const onSwipeStart = (e) => { swipeStartX.current = e.touches?.[0]?.clientX ?? e.clientX; };
   const onSwipeEnd   = (e) => {
     if (swipeStartX.current === null) return;
     const endX = e.changedTouches?.[0]?.clientX ?? e.clientX;
     const dx = swipeStartX.current - endX;
-    if (Math.abs(dx) > 60) setClockStyle(s => s === 0 ? 1 : 0);
+    if (Math.abs(dx) > 60) updateClockStyle(clockStyle === 0 ? 1 : 0);
     swipeStartX.current = null;
   };
 
@@ -1088,10 +1201,10 @@ function MainLayout() {
   const isTablet  = (w >= 640 && w < 1100) && isPortrait; // tablet portrait only
   const isDesktop = w >= 1100 || isPhoneLandscape || isTabletLandscape; // pc + any landscape tablet/phone
   const clockFs = isPhone
-    ? Math.min(w * 0.36, 190)
+    ? Math.min(w * 0.30, 160)
     : isTablet
-    ? (isPortrait ? Math.min(w * 0.19, 210) : Math.min(w * 0.24, 280))
-    : Math.min(w * 0.105, 180);
+    ? (isPortrait ? Math.min(w * 0.16, 180) : Math.min(w * 0.20, 240))
+    : Math.min(w * 0.088, 152);
 
   const ampmFs = isPhone
     ? Math.min(w * 0.044, 22)
