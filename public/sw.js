@@ -1,5 +1,9 @@
-const CACHE_NAME = "live-study-clock-v3";
+const CACHE_NAME = "live-study-clock-v4";
+const OFFLINE_CACHE = "lsc-offline-media-v1";
+
 const STATIC_ASSETS = [
+  "/",
+  "/index.html",
   "/logo.png",
   "/manifest.json",
   "/default-wallpaper-phone.jpg",
@@ -16,7 +20,11 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((k) => k !== CACHE_NAME && k !== OFFLINE_CACHE)
+          .map((k) => caches.delete(k))
+      )
     )
   );
   self.clients.claim();
@@ -25,7 +33,7 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
 
-  // Always fetch fresh for HTML and JS/CSS assets — never cache them
+  // Never cache: HTML, JS, CSS (always fresh)
   if (
     e.request.mode === "navigate" ||
     url.pathname.endsWith(".js") ||
@@ -36,7 +44,30 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Cache first for static images only
+  // Offline media cache — cache first for Cloudinary video/audio
+  if (
+    url.hostname.includes("cloudinary.com") ||
+    url.pathname.endsWith(".mp4") ||
+    url.pathname.endsWith(".mp3") ||
+    url.pathname.endsWith(".webm")
+  ) {
+    e.respondWith(
+      caches.open(OFFLINE_CACHE).then(async (cache) => {
+        const cached = await cache.match(e.request);
+        if (cached) return cached;
+        // Not cached — fetch from network
+        try {
+          const res = await fetch(e.request);
+          return res;
+        } catch {
+          return new Response("Media unavailable offline", { status: 503 });
+        }
+      })
+    );
+    return;
+  }
+
+  // Static images — cache first
   if (
     url.pathname.endsWith(".png") ||
     url.pathname.endsWith(".jpg") ||
@@ -50,6 +81,6 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Network first for everything else
+  // Everything else — network first, fallback to cache
   e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });

@@ -4,6 +4,7 @@ import usePomodoro from "./hooks/usePomodoro";
 import WindowControls from "./components/WindowControls";
 import { useStore } from "./store/useStore";
 import { AnimatePresence, motion } from "framer-motion";
+import { cacheBackground, uncacheBackground, isBackgroundCached, getTotalCachedSize, formatBytes } from "./hooks/useOfflineMedia";
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function getGreeting() {
@@ -701,6 +702,150 @@ function FlipClock({ cardSize, isTimer, timerDisplay, clock, phonePortrait }) {
 }
 
 
+// ─── THREE DOT MENU BUTTON ────────────────────────────────────────────────────
+function BgMenuBtn({ bg, size = 16 }) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState(() => isBackgroundCached(bg.name) ? "cached" : "idle");
+  const [progress, setProgress] = useState(0);
+  const menuRef = useRef(null);
+  const abortRef = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => { document.removeEventListener("mousedown", handler); document.removeEventListener("touchstart", handler); };
+  }, [open]);
+
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    setStatus("downloading");
+    setProgress(0);
+    abortRef.current = new AbortController();
+    try {
+      await cacheBackground(bg, ({ percent }) => setProgress(Math.round(percent * 100)), abortRef.current.signal);
+      setStatus("cached");
+    } catch (err) {
+      // Aborted or failed — clean up partial cache
+      await uncacheBackground(bg);
+      setStatus("idle");
+    }
+    abortRef.current = null;
+  };
+
+  const handleCancel = (e) => {
+    e.stopPropagation();
+    if (abortRef.current) abortRef.current.abort();
+    setStatus("idle");
+    setProgress(0);
+    setOpen(false);
+  };
+
+  const handleRemove = async (e) => {
+    e.stopPropagation();
+    setOpen(false);
+    await uncacheBackground(bg);
+    setStatus("idle");
+  };
+
+  return (
+    <div ref={menuRef} style={{ position:"absolute", top:6, right:6, zIndex:10 }} onClick={e => e.stopPropagation()}>
+      {/* Button */}
+      {status === "downloading" ? (
+        <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+          style={{ width:26, height:26, borderRadius:"50%", border:"none", cursor:"pointer",
+            background:"rgba(0,0,0,0.65)", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
+          <svg width={22} height={22} viewBox="0 0 36 36" style={{position:"absolute"}}>
+            <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="3"/>
+            <circle cx="18" cy="18" r="15" fill="none" stroke="#f0ede8" strokeWidth="3"
+              strokeDasharray={`${progress * 0.942} 94.2`} strokeLinecap="round"
+              transform="rotate(-90 18 18)"/>
+          </svg>
+        </button>
+      ) : (
+        <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+          style={{ width:26, height:26, borderRadius:"50%", border:"none", cursor:"pointer",
+            background:"rgba(0,0,0,0.55)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)">
+            <circle cx="12" cy="5"  r="1.5"/>
+            <circle cx="12" cy="12" r="1.5"/>
+            <circle cx="12" cy="19" r="1.5"/>
+          </svg>
+        </button>
+      )}
+
+      {/* Dropdown */}
+      {open && (
+        <motion.div
+          initial={{ opacity:0, scale:0.9, y:-4 }}
+          animate={{ opacity:1, scale:1, y:0 }}
+          exit={{ opacity:0, scale:0.9 }}
+          transition={{ duration:0.12 }}
+          style={{
+            position:"absolute", top:30, right:0, zIndex:20,
+            background:"rgba(18,22,18,0.85)", backdropFilter:"blur(24px) saturate(180%)",
+            WebkitBackdropFilter:"blur(24px) saturate(180%)",
+            border:"1px solid rgba(255,255,255,0.12)", borderRadius:10,
+            minWidth:130, overflow:"hidden",
+            boxShadow:"0 8px 24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)",
+          }}>
+          {status === "downloading" ? (
+            // Show cancel option while downloading
+            <>
+              <div style={{ padding:"8px 14px 4px", fontSize:10, color:"rgba(255,255,255,0.35)", fontFamily:"'DM Sans',sans-serif", letterSpacing:"0.05em" }}>
+                {progress}% downloaded
+              </div>
+              <button onClick={handleCancel} style={{
+                width:"100%", padding:"9px 14px", border:"none", cursor:"pointer",
+                background:"transparent", color:"rgba(255,100,100,0.9)", fontSize:12,
+                fontFamily:"'DM Sans',sans-serif", textAlign:"left", display:"flex",
+                alignItems:"center", gap:7, fontWeight:600,
+              }}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+                Cancel
+              </button>
+            </>
+          ) : status === "cached" ? (
+            <button onClick={handleRemove} style={{
+              width:"100%", padding:"9px 14px", border:"none", cursor:"pointer",
+              background:"transparent", color:"rgba(255,100,100,0.9)", fontSize:12,
+              fontFamily:"'DM Sans',sans-serif", textAlign:"left", display:"flex",
+              alignItems:"center", gap:7, fontWeight:600,
+            }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/>
+              </svg>
+              Remove
+            </button>
+          ) : (
+            <button onClick={handleDownload} style={{
+              width:"100%", padding:"9px 14px", border:"none", cursor:"pointer",
+              background:"rgba(240,237,232,0.12)",
+              backdropFilter:"blur(16px)", WebkitBackdropFilter:"blur(16px)",
+              borderTop:"1px solid rgba(240,237,232,0.15)",
+              color:"#f0ede8", fontSize:12,
+              fontFamily:"'DM Sans',sans-serif", textAlign:"left", display:"flex",
+              alignItems:"center", gap:7, fontWeight:600, letterSpacing:"0.02em",
+            }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Download
+            </button>
+          )}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
 function AmbienceGrid({ cardH=100, count=6 }) {
   const backgrounds = useStore((s) => s.backgrounds);
   const current     = useStore((s) => s.currentBackground);
@@ -733,11 +878,12 @@ function AmbienceGrid({ cardH=100, count=6 }) {
             style={{height:cardH}}>
             <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover"/>
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"/>
-            <div className="absolute top-2 right-2 flex items-center gap-1 bg-[#f0ede8]/90 px-1.5 py-0.5 rounded-full">
+            <div className="absolute top-2 left-2 flex items-center gap-1 bg-[#f0ede8]/90 px-1.5 py-0.5 rounded-full">
               <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>
               <span className="text-[8px] text-black font-bold">LIVE</span>
             </div>
             <p className="absolute bottom-2 left-2.5 text-white text-[11px] font-bold drop-shadow">{bg.name}</p>
+            <BgMenuBtn bg={bg}/>
           </motion.div>
         );
       })}
@@ -789,6 +935,7 @@ function AmbienceRow({ cardW=150, cardH=105, count=8, onViewAll, labelSize="sm" 
                 <span className="text-[8px] text-black font-bold">LIVE</span>
               </div>
               <p className="absolute bottom-2.5 left-3 text-white text-xs font-bold drop-shadow">{bg.name}</p>
+              <BgMenuBtn bg={bg}/>
             </motion.div>
           );
         })}
@@ -871,6 +1018,7 @@ function ExploreModal({ onClose, desktop=false }) {
                   <div className="absolute bottom-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all border border-white/20">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   </div>
+                  <BgMenuBtn bg={bg} size={14}/>
                 </motion.div>
               ))}
             </div>
@@ -944,15 +1092,10 @@ function ExploreModal({ onClose, desktop=false }) {
               className="relative rounded-2xl overflow-hidden cursor-pointer" style={{height:130}}>
               <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover"/>
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"/>
-              <div className="absolute top-2.5 right-2.5 flex items-center gap-1 bg-[#f0ede8]/90 px-1.5 py-0.5 rounded-full">
-                <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/><span className="text-[7px] text-black font-bold">LIVE</span>
-              </div>
-              <div className="absolute bottom-2.5 left-3 right-8">
+              <BgMenuBtn bg={bg} size={13}/>
+              <div className="absolute bottom-2.5 left-3 right-3">
                 <p className="text-white font-bold text-xs leading-tight">{bg.name}</p>
                 <p className="text-white/55 text-[10px] mt-0.5">{bg.desc}</p>
-              </div>
-              <div className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center border border-white/20">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M17 8C8 10 5.9 16.17 3.82 21"/><path d="M9.1 10.1c1.9-3.1 5.9-6.1 11.9-8.1 0 6-2.9 10.9-8.9 13.9"/></svg>
               </div>
             </motion.div>
           ))}
@@ -1069,10 +1212,7 @@ function DesktopSidebar({ open, onClose, onViewAll }) {
                       style={{ height: 100 }}>
                       <img src={bg.thumbnail} alt={bg.name} className="w-full h-full object-cover"/>
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"/>
-                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-[#f0ede8]/90 px-1.5 py-0.5 rounded-full">
-                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"/>
-                        <span className="text-[8px] text-black font-bold">LIVE</span>
-                      </div>
+                      <BgMenuBtn bg={bg} size={13}/>
                       <p className="absolute bottom-2 left-2.5 text-white text-[11px] font-bold drop-shadow">{bg.name}</p>
                     </motion.div>
                   );
@@ -1375,7 +1515,7 @@ function MainLayout() {
 
       <AnimatePresence>{showSetTime   && <SetTimeSheet onClose={()=>setShowSetTime(false)}/>}</AnimatePresence>
       <AnimatePresence>{showFSPreview && <FSPreview    onClose={()=>setShowFSPreview(false)}/>}</AnimatePresence>
-      <AnimatePresence>{showExplore   && <ExploreModal onClose={()=>setShowExplore(false)} desktop={true}/>}</AnimatePresence>
+      <AnimatePresence>{showExplore   && <ExploreModal onClose={()=>setShowExplore(false)} desktop={!isPhone}/>}</AnimatePresence>
       {isDesktop && <DesktopSidebar open={showSidebar} onClose={()=>setShowSidebar(false)} onViewAll={()=>setShowExplore(true)}/>}
     </div>
   );
