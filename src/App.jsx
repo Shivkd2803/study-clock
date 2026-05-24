@@ -5,6 +5,7 @@ import WindowControls from "./components/WindowControls";
 import { useStore } from "./store/useStore";
 import { AnimatePresence, motion } from "framer-motion";
 import { cacheBackground, uncacheBackground, isBackgroundCached, getTotalCachedSize, formatBytes } from "./hooks/useOfflineMedia";
+import { usePiPWidget } from "./hooks/usePiPWidget";
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function getGreeting() {
@@ -355,38 +356,25 @@ function FSPreview({ onClose }) {
   const { w, h }   = useWindowSize();
   const landscape   = w > h;
   const containerRef = useRef(null);
+  const fsListenerRef = useRef(false);
 
-  // Enter native fullscreen on mount, exit on unmount
   useEffect(() => {
-    const el = document.documentElement;
-    let listenerAttached = false;
-
     const onFSChange = () => {
-      if (!listenerAttached) return;
+      if (!fsListenerRef.current) return;
       if (!document.fullscreenElement && !document.webkitFullscreenElement) {
         onClose();
       }
     };
 
-    const tryFullscreen = async () => {
-      try {
-        if (el.requestFullscreen) await el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-      } catch (e) {
-        // Fullscreen rejected (e.g. foldable/hybrid device) — overlay still shows, just not native FS
-      }
-      // Attach listener AFTER fullscreen entry settles so the enter-event doesn't trigger onClose
-      setTimeout(() => {
-        listenerAttached = true;
-        document.addEventListener("fullscreenchange", onFSChange);
-        document.addEventListener("webkitfullscreenchange", onFSChange);
-      }, 300);
-    };
-
-    tryFullscreen();
+    const t = setTimeout(() => {
+      fsListenerRef.current = true;
+      document.addEventListener("fullscreenchange", onFSChange);
+      document.addEventListener("webkitfullscreenchange", onFSChange);
+    }, 300);
 
     return () => {
-      listenerAttached = false;
+      fsListenerRef.current = false;
+      clearTimeout(t);
       document.removeEventListener("fullscreenchange", onFSChange);
       document.removeEventListener("webkitfullscreenchange", onFSChange);
       if (document.fullscreenElement || document.webkitFullscreenElement) {
@@ -1319,6 +1307,16 @@ function MainLayout() {
   const [showSetTime,   setShowSetTime]   = useState(false);
   const [showFSPreview, setShowFSPreview] = useState(false);
   const [showSidebar,   setShowSidebar]   = useState(false);
+  const { enterPiP } = usePiPWidget();
+  const openFullscreen = () => {
+    setShowFSPreview(true);
+    // Request native fullscreen immediately from user gesture
+    const el = document.documentElement;
+    try {
+      if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } catch {}
+  };
 
   useTimerEndBeep(time, mode);
 
@@ -1340,6 +1338,14 @@ function MainLayout() {
   const isPhone   = w < 640 && isPortrait;         // portrait phone only
   const isTablet  = (w >= 640 && w < 1100) && isPortrait; // tablet portrait only
   const isDesktop = w >= 1100 || isPhoneLandscape || isTabletLandscape; // pc + any landscape tablet/phone
+
+  // Desktop only: auto PiP when tab/window is hidden (minimized)
+  useEffect(() => {
+    if (!isDesktop) return;
+    const onHide = () => { if (document.visibilityState === "hidden") enterPiP(); };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [isDesktop]);
   const clockFs = isPhone
     ? Math.min(w * 0.30, 160)
     : isTablet
@@ -1374,14 +1380,14 @@ function MainLayout() {
       const now = Date.now();
       if (now - lastTouchRef.current < 350) {
         lastTouchRef.current = 0;
-        setShowFSPreview(true);
+        openFullscreen();
       } else {
         lastTouchRef.current = now;
       }
     };
     const onDblClick = (e) => {
       if (e.target?.closest("button, a, input, select, textarea, [role='button']")) return;
-      setShowFSPreview(true);
+      openFullscreen();
     };
     el.addEventListener("touchend", onTouchEnd, { passive: true });
     el.addEventListener("dblclick", onDblClick);
@@ -1422,7 +1428,7 @@ function MainLayout() {
           <div style={{padding: isPhone?"6px 16px":"8px 20px"}}>
             <motion.button
               whileTap={{scale:0.88}}
-              onClick={()=>setShowFSPreview(true)}
+              onClick={openFullscreen}
               className="flex items-center justify-center text-white/70 hover:text-white transition-all"
               style={{background:"none", border:"none", padding:4, filter:"drop-shadow(0 2px 5px rgba(0,0,0,0.6))"}}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1514,7 +1520,7 @@ function MainLayout() {
       </div>
 
       <AnimatePresence>{showSetTime   && <SetTimeSheet onClose={()=>setShowSetTime(false)}/>}</AnimatePresence>
-      <AnimatePresence>{showFSPreview && <FSPreview    onClose={()=>setShowFSPreview(false)}/>}</AnimatePresence>
+      <AnimatePresence>{showFSPreview && <FSPreview onClose={()=>{ setShowFSPreview(false); if(!isDesktop) enterPiP(); }}/>}</AnimatePresence>
       <AnimatePresence>{showExplore   && <ExploreModal onClose={()=>setShowExplore(false)} desktop={!isPhone}/>}</AnimatePresence>
       {isDesktop && <DesktopSidebar open={showSidebar} onClose={()=>setShowSidebar(false)} onViewAll={()=>setShowExplore(true)}/>}
     </div>

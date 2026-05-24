@@ -1,4 +1,4 @@
-const CACHE_NAME = "live-study-clock-v4";
+const CACHE_NAME = "live-study-clock-v5";
 const OFFLINE_CACHE = "lsc-offline-media-v1";
 
 const STATIC_ASSETS = [
@@ -10,13 +10,17 @@ const STATIC_ASSETS = [
   "/default-wallpaper-desktop.jpg",
 ];
 
+// Install — cache app shell
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.addAll(STATIC_ASSETS).catch(() => {})
+    )
   );
   self.skipWaiting();
 });
 
+// Activate — clean old caches (but keep offline media)
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
@@ -33,18 +37,7 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
 
-  // Never cache: HTML, JS, CSS (always fresh)
-  if (
-    e.request.mode === "navigate" ||
-    url.pathname.endsWith(".js") ||
-    url.pathname.endsWith(".css") ||
-    url.pathname.endsWith(".jsx")
-  ) {
-    e.respondWith(fetch(e.request).catch(() => caches.match("/index.html")));
-    return;
-  }
-
-  // Offline media cache — cache first for Cloudinary video/audio
+  // ── Cloudinary media — offline cache first, then network ──────────────────
   if (
     url.hostname.includes("cloudinary.com") ||
     url.pathname.endsWith(".mp4") ||
@@ -55,19 +48,46 @@ self.addEventListener("fetch", (e) => {
       caches.open(OFFLINE_CACHE).then(async (cache) => {
         const cached = await cache.match(e.request);
         if (cached) return cached;
-        // Not cached — fetch from network
         try {
-          const res = await fetch(e.request);
-          return res;
+          return await fetch(e.request);
         } catch {
-          return new Response("Media unavailable offline", { status: 503 });
+          return new Response(JSON.stringify({ error: "offline" }), {
+            status: 503, headers: { "Content-Type": "application/json" }
+          });
         }
       })
     );
     return;
   }
 
-  // Static images — cache first
+  // ── JS / CSS — network first, fallback to cache ────────────────────────────
+  if (
+    url.pathname.endsWith(".js") ||
+    url.pathname.endsWith(".css")
+  ) {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          // Cache fresh copy
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // ── HTML navigation — network first, fallback to cached /index.html ───────
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      fetch(e.request)
+        .catch(() => caches.match("/index.html"))
+    );
+    return;
+  }
+
+  // ── Static images — cache first ───────────────────────────────────────────
   if (
     url.pathname.endsWith(".png") ||
     url.pathname.endsWith(".jpg") ||
@@ -76,11 +96,20 @@ self.addEventListener("fetch", (e) => {
     url.pathname.endsWith(".ico")
   ) {
     e.respondWith(
-      caches.match(e.request).then((cached) => cached || fetch(e.request))
+      caches.match(e.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(e.request).then((res) => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
+          return res;
+        });
+      })
     );
     return;
   }
 
-  // Everything else — network first, fallback to cache
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+  // ── Everything else — network first, fallback to cache ────────────────────
+  e.respondWith(
+    fetch(e.request).catch(() => caches.match(e.request))
+  );
 });
