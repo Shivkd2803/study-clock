@@ -357,6 +357,12 @@ function FSPreview({ onClose }) {
   const landscape   = w > h;
   const containerRef = useRef(null);
   const fsListenerRef = useRef(false);
+  const { enterPiP } = usePiPWidget();
+
+  const handleWidget = () => {
+    onClose();
+    setTimeout(() => enterPiP(), 100);
+  };
 
   useEffect(() => {
     const onFSChange = () => {
@@ -565,6 +571,34 @@ function FSPreview({ onClose }) {
               <line x1="10" y1="14" x2="3" y2="21"/>
               <line x1="21" y1="3" x2="14" y2="10"/>
             </svg>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* WIDGET BUTTON — bottom-right, opens PiP widget */}
+      <AnimatePresence>
+        {uiVisible && (
+          <motion.button
+            key="fs-widget-btn"
+            initial={{opacity:0, scale:0.85}} animate={{opacity:1, scale:1}} exit={{opacity:0, scale:0.85}}
+            transition={{duration:0.25}}
+            onClick={handleWidget}
+            className="absolute bottom-5 right-5 z-20 flex items-center gap-2 text-white active:scale-90 transition-all"
+            style={{
+              background: "rgba(0,0,0,0.38)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              borderRadius: 50,
+              padding: "8px 14px 8px 10px",
+              filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.55))",
+            }}>
+            {/* PiP / widget icon */}
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/>
+              <rect x="13" y="10" width="8" height="6" rx="1.5" fill="currentColor" stroke="none" opacity="0.85"/>
+            </svg>
+            <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.02em", fontFamily: "'DM Sans', sans-serif", lineHeight: 1 }}>Widget</span>
           </motion.button>
         )}
       </AnimatePresence>
