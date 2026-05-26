@@ -25,13 +25,16 @@ const s = {
     display:"block", fontSize:11, color:"rgba(255,255,255,0.45)",
     fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase",
   },
-  btn: (variant="primary") => ({
-    padding:"10px 20px", borderRadius:10, border:"none", cursor:"pointer",
-    fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
-    background: variant==="primary" ? "#f0ede8" : variant==="danger" ? "rgba(255,60,60,0.15)" : "rgba(255,255,255,0.07)",
-    color: variant==="primary" ? "#0a0f0a" : variant==="danger" ? "#ff8888" : "rgba(255,255,255,0.6)",
-    border: variant==="danger" ? "1px solid rgba(255,60,60,0.25)" : "none",
-  }),
+  btn: (variant="primary") => {
+    const base = {
+      padding:"10px 20px", borderRadius:10, cursor:"pointer",
+      fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif",
+      background: variant==="primary" ? "#f0ede8" : variant==="danger" ? "rgba(255,60,60,0.15)" : "rgba(255,255,255,0.07)",
+      color: variant==="primary" ? "#0a0f0a" : variant==="danger" ? "#ff8888" : "rgba(255,255,255,0.6)",
+    };
+    base.border = variant==="danger" ? "1px solid rgba(255,60,60,0.25)" : "none";
+    return base;
+  },
 };
 
 function get(key, fb) { try { return JSON.parse(localStorage.getItem(key)) ?? fb; } catch { return fb; } }
