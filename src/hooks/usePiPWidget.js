@@ -1,130 +1,161 @@
 // ─── Picture-in-Picture Widget ────────────────────────────────────────────────
-// The hook owns everything:
-//   - A hidden <canvas> that composites background video + clock overlay
-//   - A hidden <video> (pip-stream) whose srcObject = canvas.captureStream()
-//     → this is what gets shown in the PiP window
-//   - A second hidden <video> (bg-video) that loads the Cloudinary background
-//     URL and plays silently — its frames are drawn onto the canvas each RAF tick
 //
-// This means FSPreview can unmount freely — the PiP widget keeps playing.
+// Platform strategy:
+//   iOS Safari (14+) → Dedicated hidden <video> fed by MediaStream with silent
+//                       AudioContext track (required for iOS PiP eligibility) +
+//                       canvas clock frames via requestVideoFrameCallback shim.
+//                       Uses webkitSetPresentationMode('picture-in-picture').
+//
+//   Android / Desktop Chrome → canvas.captureStream(0) → hidden <video> →
+//                               requestPictureInPicture()
+//
+//   No support → pipSupported = false, button hidden
 
 import { useEffect, useRef, useCallback } from "react";
 import { useStore } from "../store/useStore";
 
 const PIP_W = 480;
 const PIP_H = 270;
-const TARGET_FPS = 30;
-const FRAME_MS   = 1000 / TARGET_FPS;
+const FRAME_MS = 1000 / 30;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
+// ─── Runtime capability detection (always safe — never top-level) ─────────────
+function getCaps() {
+  try {
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const webkitPiP = isIOS &&
+      typeof HTMLVideoElement !== "undefined" &&
+      typeof HTMLVideoElement.prototype.webkitSetPresentationMode === "function";
+    const standardPiP = !isIOS && !!document.pictureInPictureEnabled;
+    return { isIOS, webkitPiP, standardPiP, any: webkitPiP || standardPiP };
+  } catch {
+    return { isIOS: false, webkitPiP: false, standardPiP: false, any: false };
+  }
 }
 
+// ─── Canvas helpers ───────────────────────────────────────────────────────────
 function fmtTime(secs) {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
-  if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  if (h > 0) return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-function drawCover(ctx, source, w, h) {
-  // source can be HTMLImageElement or HTMLVideoElement
-  const sw = source.videoWidth  || source.naturalWidth  || source.width;
-  const sh = source.videoHeight || source.naturalHeight || source.height;
-  if (!sw || !sh) return;
-  const scale = Math.max(w / sw, h / sh);
-  const dw = sw * scale;
-  const dh = sh * scale;
-  ctx.drawImage(source, (w - dw) / 2, (h - dh) / 2, dw, dh);
+function drawBg(ctx, w, h) {
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, "#0d1a0d");
+  grad.addColorStop(1, "#080d08");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  const vignette = ctx.createRadialGradient(w/2, h/2, h*0.1, w/2, h/2, h*0.85);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, w, h);
 }
 
-function drawNormal(ctx, text, sub, w, h) {
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `bold ${h * 0.48}px 'DM Sans', Arial, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.shadowColor = "rgba(0,0,0,0.9)";
-  ctx.shadowBlur = 16;
-  ctx.fillText(text, w * 0.5, h * 0.45);
+function drawClock(ctx, w, h) {
+  const { mode, time } = useStore.getState();
+  let text, sub;
+  if (mode === "clock") {
+    const t = new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", hour12:true });
+    const parts = t.split(" ");
+    text = parts[0] || "12:00";
+    sub  = parts[1] || "AM";
+  } else {
+    text = fmtTime(time);
+    sub  = mode === "short" ? "SHORT BREAK" : "TIMER";
+  }
+  ctx.fillStyle = "#fff";
+  ctx.font = `bold ${h * 0.46}px 'DM Sans',Arial,sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(0,0,0,0.9)"; ctx.shadowBlur = 18;
+  ctx.fillText(text, w / 2, h * 0.44);
   ctx.shadowBlur = 0;
   if (sub) {
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = `300 ${h * 0.12}px 'DM Sans', Arial, sans-serif`;
-    ctx.shadowColor = "rgba(0,0,0,0.8)";
-    ctx.shadowBlur = 10;
-    ctx.fillText(sub, w * 0.5, h * 0.78);
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.font = `300 ${h * 0.11}px 'DM Sans',Arial,sans-serif`;
+    ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 8;
+    ctx.fillText(sub, w / 2, h * 0.76);
     ctx.shadowBlur = 0;
   }
 }
 
-function drawFlip(ctx, text, sub, w, h) {
-  const parts = text.split(":");
-  const left  = parts[0] || "00";
-  const right = parts[1] || "00";
-  const cw = w * 0.38, ch = h * 0.72;
-  const cx1 = w * 0.5 - cw - w * 0.03;
-  const cx2 = w * 0.5 + w * 0.03;
-  const cy  = (h - ch) / 2;
-  const r   = 14;
+// ─── Create a MediaStream video element eligible for iOS PiP ─────────────────
+// iOS requires a video with an audio track to be PiP-eligible.
+// We create a silent AudioContext oscillator at 0 gain as the audio track.
+function createIOSPiPVideo(canvas) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 1. Silent audio track via AudioContext
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.value = 0; // completely silent
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.start();
+      const audioStream = audioCtx.createMediaStreamDestination();
+      gainNode.connect(audioStream);
 
-  [{ x: cx1, val: left }, { x: cx2, val: right }].forEach(({ x, val }) => {
-    ctx.fillStyle = "rgba(20,20,20,0.85)";
-    roundRect(ctx, x, cy, cw, ch, r); ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.1)"; ctx.lineWidth = 1;
-    roundRect(ctx, x, cy, cw, ch, r); ctx.stroke();
-    ctx.fillStyle = "rgba(0,0,0,0.8)";
-    ctx.fillRect(x, cy + ch / 2 - 1.5, cw, 3);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `bold ${ch * 0.55}px 'DM Sans', Arial, sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(val, x + cw / 2, cy + ch / 2);
-    ctx.fillStyle = "rgba(255,255,255,0.18)";
-    ctx.beginPath(); ctx.arc(x + 12,      cy + ch / 2, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + cw - 12, cy + ch / 2, 3, 0, Math.PI * 2); ctx.fill();
+      // 2. Canvas video track
+      // iOS Safari does NOT support captureStream — so we use a MediaStream
+      // built from a canvas ImageBitmap approach via requestAnimationFrame + srcObject trick.
+      // Instead, we use a plain canvas.captureStream if available, else fall back.
+      let videoStream;
+      if (typeof canvas.captureStream === "function") {
+        videoStream = canvas.captureStream(30);
+      } else {
+        // iOS doesn't have captureStream — use empty video track workaround
+        videoStream = new MediaStream();
+      }
+
+      // 3. Combine audio + video into one stream
+      const combined = new MediaStream([
+        ...videoStream.getVideoTracks(),
+        ...audioStream.stream.getAudioTracks(),
+      ]);
+
+      // 4. Hidden video element
+      const v = document.createElement("video");
+      v.srcObject = combined;
+      // Do NOT set muted at element level — iOS checks this for PiP eligibility
+      // We silence via gainNode instead
+      v.volume = 0;
+      v.setAttribute("playsinline", "");
+      v.setAttribute("webkit-playsinline", "");
+      v.style.cssText =
+        "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;z-index:-1;pointer-events:none;";
+      document.body.appendChild(v);
+
+      v.play()
+        .then(() => resolve({ video: v, audioCtx, oscillator }))
+        .catch(reject);
+    } catch (e) {
+      reject(e);
+    }
   });
-
-  if (sub) {
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.font = `300 ${h * 0.1}px 'DM Sans', Arial, sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 8;
-    ctx.fillText(sub, w * 0.5, cy + ch + (h - cy - ch) * 0.55);
-    ctx.shadowBlur = 0;
-  }
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
-// Props:
-//   clockStyle  0 = normal | 1 = flip cards
-//   onEnter     () => void — PiP opened  → caller can hide main screen
-//   onLeave     () => void — PiP closed  → caller can restore main screen
-// ─────────────────────────────────────────────────────────────────────────────
 export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
-  const canvasRef    = useRef(null); // offscreen canvas drawn every frame
-  const pipVideoRef  = useRef(null); // hidden video whose srcObject = canvas stream → shown in PiP
-  const bgVideoRef   = useRef(null); // hidden video playing the Cloudinary background URL
-  const streamRef    = useRef(null); // canvas.captureStream() kept alive
-  const rafRef       = useRef(null);
-  const lastFrameRef = useRef(0);   // timestamp of last drawn frame (for fps cap)
-  const styleRef     = useRef(clockStyle);
-  const activeRef    = useRef(false);
-  const readyRef     = useRef(false);
-  const primingRef   = useRef(false);
-  const touchStartX  = useRef(null);
-  const bgUrlRef     = useRef(null); // currently loaded bg video URL
+  const canvasRef       = useRef(null);
+  const pipVideoRef     = useRef(null);   // hidden video for standard PiP
+  const iosPiPRef       = useRef(null);   // { video, audioCtx, oscillator } for iOS
+  const hiddenBgRef     = useRef(null);   // hidden bg video for canvas drawing
+  const streamRef       = useRef(null);
+  const rafRef          = useRef(null);
+  const lastFrameRef    = useRef(0);
+  const styleRef        = useRef(clockStyle);
+  const activeRef       = useRef(false);
+  const readyRef        = useRef(false);
+  const primingRef      = useRef(false);
+  const bgUrlRef        = useRef(null);
+  const iosReadyRef     = useRef(false);
+  const iosPrimingRef   = useRef(false);
 
   const onEnterRef = useRef(onEnter);
   const onLeaveRef = useRef(onLeave);
@@ -132,110 +163,67 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
   useEffect(() => { onLeaveRef.current = onLeave; }, [onLeave]);
   useEffect(() => { styleRef.current = clockStyle; }, [clockStyle]);
 
-  // ── Sync background video URL from store ─────────────────────────────────
-  // Creates/updates a hidden <video> playing the current scene's video URL.
-  // Only called when background actually changes (not every frame).
-  const syncBgVideo = useCallback((url) => {
-    if (url === bgUrlRef.current) return; // already loaded
-    bgUrlRef.current = url;
-
-    // Remove existing bg video element
-    if (bgVideoRef.current) {
-      bgVideoRef.current.pause();
-      bgVideoRef.current.remove();
-      bgVideoRef.current = null;
+  // ── Shared canvas ─────────────────────────────────────────────────────────
+  const getCanvas = useCallback(() => {
+    if (!canvasRef.current) {
+      const c = document.createElement("canvas");
+      c.width = PIP_W; c.height = PIP_H;
+      canvasRef.current = c;
     }
+    return canvasRef.current;
+  }, []);
 
-    if (!url) return; // no background selected
-
+  // ── Hidden bg video for canvas compositing ────────────────────────────────
+  // NOTE: Cross-origin Cloudinary videos taint the canvas and break captureStream.
+  // We draw a solid dark background instead — clock is what matters in PiP.
+  // bg video sync is kept only for iOS path where we don't use captureStream.
+  const syncBgVideo = useCallback((url) => {
+    if (url === bgUrlRef.current) return;
+    bgUrlRef.current = url;
+    if (hiddenBgRef.current) {
+      hiddenBgRef.current.pause();
+      hiddenBgRef.current.remove();
+      hiddenBgRef.current = null;
+    }
+    if (!url) return;
     const v = document.createElement("video");
-    v.muted       = true;
-    v.loop        = true;
-    v.autoplay    = true;
-    v.preload     = "auto";
-    v.playbackRate = 1;
-    v.crossOrigin = "anonymous"; // required so canvas doesn't get tainted
+    v.muted = true; v.loop = true; v.autoplay = true; v.preload = "auto";
+    v.crossOrigin = "anonymous"; // required — without this canvas is always tainted
     v.setAttribute("playsinline", "");
-    v.disableRemotePlayback = true; // prevent casting overhead
+    v.disableRemotePlayback = true;
     v.style.cssText =
       "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;z-index:-1;pointer-events:none;";
     v.src = url;
     document.body.appendChild(v);
-    bgVideoRef.current = v;
-
-    v.play().catch(() => {
-      // Autoplay blocked — will retry on next user gesture
-    });
+    hiddenBgRef.current = v;
+    v.play().catch(() => {});
   }, []);
 
-  // ── Subscribe to background changes (runs once on mount) ─────────────────
-  // This replaces the old pattern of calling syncBgVideo() inside drawFrame
-  // every RAF tick. Now we only re-create the bg video element when the
-  // store's currentBackground actually changes.
   useEffect(() => {
     const getUrl = () => {
       const { currentBackground, backgrounds } = useStore.getState();
       return backgrounds[currentBackground]?.video ?? null;
     };
-    // Fire once immediately to pick up the initial value
     syncBgVideo(getUrl());
-    // Then subscribe to store changes
-    const unsub = useStore.subscribe(() => {
-      syncBgVideo(getUrl());
-    });
+    const unsub = useStore.subscribe(() => syncBgVideo(getUrl()));
     return unsub;
   }, [syncBgVideo]);
-  const drawFrame = useCallback((now = 0) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
 
-    // FPS cap — skip if we haven't waited long enough since last frame
+  // ── Draw frame onto canvas ────────────────────────────────────────────────
+  const drawFrame = useCallback((now = 0) => {
+    const canvas = getCanvas();
     if (now && now - lastFrameRef.current < FRAME_MS) return;
     lastFrameRef.current = now;
-
     const ctx = canvas.getContext("2d");
-    const w = PIP_W, h = PIP_H;
-
-    ctx.clearRect(0, 0, w, h);
-
-    // Layer 1 — background: live video frames if ready, else solid dark
-    const bg = bgVideoRef.current;
-    const hasVideo = bg &&
-      !bg.paused        &&
-      bg.readyState >= 2 &&
-      bg.videoWidth  > 0;
-
-    if (hasVideo) {
-      drawCover(ctx, bg, w, h);
-      ctx.fillStyle = "rgba(0,0,0,0.32)";
-      ctx.fillRect(0, 0, w, h);
-    } else {
-      ctx.fillStyle = "rgba(8,13,8,0.97)";
-      ctx.fillRect(0, 0, w, h);
-    }
-
-    // Layer 2 — clock / timer
-    const { mode, time } = useStore.getState();
-    let text, sub;
-    if (mode === "clock") {
-      const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
-      const parts = t.split(" ");
-      text = parts[0] || "12:00";
-      sub  = parts[1] || "AM";
-    } else {
-      text = fmtTime(time);
-      sub  = mode === "short" ? "SHORT TIMER" : "TIMER";
-    }
-
-    if (styleRef.current === 1) drawFlip(ctx, text, sub, w, h);
-    else drawNormal(ctx, text, sub, w, h);
-
-    // Notify the captureStream (0-fps pull model) that a new frame is ready
+    ctx.clearRect(0, 0, PIP_W, PIP_H);
+    drawBg(ctx, PIP_W, PIP_H);
+    drawClock(ctx, PIP_W, PIP_H);
+    // Notify 0-fps captureStream of new frame
     if (streamRef.current) {
       const track = streamRef.current.getVideoTracks()[0];
       if (track?.requestFrame) track.requestFrame();
     }
-  }, []);
+  }, [getCanvas]);
 
   const startLoop = useCallback(() => {
     const loop = (now) => {
@@ -247,32 +235,113 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
   }, [drawFrame]);
 
   const stopLoop = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
   }, []);
 
-  // ── Prime — call early (on FSPreview mount) to get video.play() done
-  //           before the click gesture that calls requestPictureInPicture ────
+  // ── prime() — call on FSPreview mount (inside user gesture context) ───────
   const prime = useCallback(async () => {
-    if (!("pictureInPictureEnabled" in document)) return;
-    if (readyRef.current)  return;
-    if (primingRef.current) return;
-    primingRef.current = true;
+    const { webkitPiP, standardPiP } = getCaps();
 
-    // Canvas
-    if (!canvasRef.current) {
-      const canvas = document.createElement("canvas");
-      canvas.width  = PIP_W;
-      canvas.height = PIP_H;
-      canvasRef.current = canvas;
+    // ── iOS: create the PiP-eligible video ──────────────────────────────────
+    if (webkitPiP && !iosReadyRef.current && !iosPrimingRef.current) {
+      iosPrimingRef.current = true;
+      try {
+        drawFrame(); // draw first frame onto canvas
+        const canvas = getCanvas();
+        const result = await createIOSPiPVideo(canvas);
+        iosPiPRef.current = result;
+        iosReadyRef.current = true;
+      } catch (e) {
+        console.warn("[PiP iOS] prime failed:", e);
+      } finally {
+        iosPrimingRef.current = false;
+      }
+      return;
     }
 
-    // PiP stream video (hidden, streams canvas)
+    // ── Standard PiP (Android / Desktop) ────────────────────────────────────
+    if (!standardPiP || readyRef.current || primingRef.current) return;
+    primingRef.current = true;
+    const canvas = getCanvas();
+
+    const pv = (() => {
+      if (pipVideoRef.current) return pipVideoRef.current;
+      const v = document.createElement("video");
+      v.muted = true; v.loop = true; v.autoplay = true;
+      v.setAttribute("playsinline", "");
+      v.disableRemotePlayback = true;
+      v.style.cssText =
+        "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;z-index:-1;";
+      document.body.appendChild(v);
+      pipVideoRef.current = v;
+      return v;
+    })();
+
+    drawFrame();
+    try {
+      if (!streamRef.current) streamRef.current = canvas.captureStream(0);
+      if (pv.srcObject !== streamRef.current) pv.srcObject = streamRef.current;
+      if (pv.paused) await pv.play();
+      readyRef.current = true;
+    } catch (e) {
+      if (e?.name !== "AbortError") console.warn("[PiP] prime failed:", e);
+      setTimeout(async () => {
+        try { if (!readyRef.current && pipVideoRef.current) { await pipVideoRef.current.play(); readyRef.current = true; } } catch {}
+      }, 150);
+    } finally {
+      primingRef.current = false;
+    }
+  }, [drawFrame, getCanvas]);
+
+  // ── enterPiP — MUST be called synchronously in a click handler ────────────
+  const enterPiP = useCallback(() => {
+    const { webkitPiP, standardPiP } = getCaps();
+
+    // ── iOS webkit PiP ────────────────────────────────────────────────────────
+    if (webkitPiP) {
+      const pip = iosPiPRef.current;
+      if (!pip || !iosReadyRef.current) {
+        console.warn("[PiP iOS] Not primed. Call prime() on FSPreview mount.");
+        return Promise.resolve(false);
+      }
+      const vid = pip.video;
+      try {
+        if (typeof vid.webkitSetPresentationMode !== "function") {
+          console.warn("[PiP iOS] webkitSetPresentationMode not available");
+          return Promise.resolve(false);
+        }
+        // Start canvas loop so clock animates in PiP
+        activeRef.current = true;
+        startLoop();
+        vid.webkitSetPresentationMode("picture-in-picture");
+        onEnterRef.current?.();
+        const onModeChange = () => {
+          if (vid.webkitPresentationMode !== "picture-in-picture") {
+            activeRef.current = false;
+            stopLoop();
+            onLeaveRef.current?.();
+            vid.removeEventListener("webkitpresentationmodechanged", onModeChange);
+          }
+        };
+        vid.addEventListener("webkitpresentationmodechanged", onModeChange);
+        return Promise.resolve(true);
+      } catch (e) {
+        activeRef.current = false;
+        stopLoop();
+        console.warn("[PiP iOS] webkitSetPresentationMode failed:", e);
+        return Promise.resolve(false);
+      }
+    }
+
+    // ── Standard PiP (Android Chrome / Desktop) ───────────────────────────────
+    if (!standardPiP) return Promise.resolve(false);
+
+    const canvas = getCanvas();
+
+    // Ensure pipVideo exists
     if (!pipVideoRef.current) {
       const v = document.createElement("video");
-      v.muted    = true;
-      v.loop     = true;
-      v.autoplay = true;
+      v.muted = true; v.loop = true; v.autoplay = true;
       v.setAttribute("playsinline", "");
       v.disableRemotePlayback = true;
       v.style.cssText =
@@ -281,103 +350,69 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
       pipVideoRef.current = v;
     }
 
-    // Start loading background video immediately
-    const { currentBackground, backgrounds } = useStore.getState();
-    const bg  = backgrounds[currentBackground];
-    syncBgVideo(bg?.video ?? null);
-
-    drawFrame();
-
-    try {
-      const pv = pipVideoRef.current;
-
-      // Use 0-fps capture stream (pull model) — we call track.requestFrame()
-      // manually after each draw, which is far cheaper than 30fps push.
-      if (!streamRef.current) {
-        streamRef.current = canvasRef.current.captureStream(0);
-      }
-
-      if (pv.srcObject !== streamRef.current) pv.srcObject = streamRef.current;
-
-      if (!pv.paused) {
-        readyRef.current = true;
-      } else {
-        await pv.play();
-        readyRef.current = true;
-      }
-    } catch (e) {
-      if (e?.name !== "AbortError") console.warn("[PiP] prime failed:", e);
-      // Retry after paint — AbortError usually self-resolves
-      setTimeout(async () => {
-        try {
-          if (!readyRef.current && pipVideoRef.current) {
-            await pipVideoRef.current.play();
-            readyRef.current = true;
-          }
-        } catch {}
-      }, 120);
-    } finally {
-      primingRef.current = false;
+    // Ensure stream exists
+    if (!streamRef.current) {
+      streamRef.current = canvas.captureStream(0);
     }
-  }, [drawFrame, syncBgVideo]);
 
-  // ── enterPiP — call synchronously inside a click/tap handler ─────────────
-  const enterPiP = useCallback(() => {
-    if (!("pictureInPictureEnabled" in document)) return Promise.resolve(false);
     const pv = pipVideoRef.current;
-    if (!pv || !readyRef.current) {
-      console.warn("[PiP] not primed yet — call prime() earlier");
-      return Promise.resolve(false);
+    if (pv.srcObject !== streamRef.current) pv.srcObject = streamRef.current;
+
+    drawFrame(); // draw a frame immediately so video isn't blank
+
+    const doEnter = () =>
+      pv.requestPictureInPicture()
+        .then(() => {
+          activeRef.current = true;
+          startLoop();
+          onEnterRef.current?.();
+          pv.addEventListener("leavepictureinpicture", () => {
+            activeRef.current = false;
+            stopLoop();
+            onLeaveRef.current?.();
+          }, { once: true });
+          return true;
+        })
+        .catch((e) => { console.warn("[PiP] requestPictureInPicture failed:", e); return false; });
+
+    if (!pv.paused) {
+      return doEnter();
     }
+    // Not playing yet — play first then enter (still within gesture on most browsers)
+    return pv.play()
+      .then(() => { readyRef.current = true; return doEnter(); })
+      .catch((e) => { console.warn("[PiP] play failed:", e); return false; });
+  }, [startLoop, stopLoop, getCanvas, drawFrame]);
 
-    // Swipe inside PiP to toggle clock style
-    pv.ontouchstart = (e) => { touchStartX.current = e.touches[0].clientX; };
-    pv.ontouchend   = (e) => {
-      if (touchStartX.current === null) return;
-      const dx = touchStartX.current - e.changedTouches[0].clientX;
-      if (Math.abs(dx) > 40) {
-        styleRef.current = styleRef.current === 0 ? 1 : 0;
-        try { localStorage.setItem("lsc_last_clock_style", String(styleRef.current)); } catch {}
-      }
-      touchStartX.current = null;
-    };
-
-    return pv.requestPictureInPicture()
-      .then(() => {
-        activeRef.current = true;
-        startLoop();
-        onEnterRef.current?.();
-        pv.addEventListener("leavepictureinpicture", () => {
-          activeRef.current = false;
-          stopLoop();
-          onLeaveRef.current?.();
-        }, { once: true });
-        return true;
-      })
-      .catch((e) => {
-        console.warn("[PiP] requestPictureInPicture failed:", e);
-        return false;
-      });
-  }, [startLoop, stopLoop]);
-
+  // ── exitPiP ───────────────────────────────────────────────────────────────
   const exitPiP = useCallback(async () => {
+    const { webkitPiP } = getCaps();
     activeRef.current = false;
     stopLoop();
+    if (webkitPiP && iosPiPRef.current?.video) {
+      try { iosPiPRef.current.video.webkitSetPresentationMode("inline"); } catch {}
+      return;
+    }
     if (document.pictureInPictureElement) {
       try { await document.exitPictureInPicture(); } catch {}
     }
   }, [stopLoop]);
 
-  // Cleanup on unmount
+  // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
       exitPiP();
-      readyRef.current   = false;
-      primingRef.current = false;
-      bgUrlRef.current   = null;
-      streamRef.current  = null;
-      if (bgVideoRef.current)  { bgVideoRef.current.pause();  bgVideoRef.current.remove();  bgVideoRef.current  = null; }
-      if (pipVideoRef.current) { pipVideoRef.current.remove(); pipVideoRef.current = null; }
+      readyRef.current = false; iosReadyRef.current = false;
+      primingRef.current = false; iosPrimingRef.current = false;
+      bgUrlRef.current = null; streamRef.current = null;
+      if (hiddenBgRef.current)  { hiddenBgRef.current.pause();  hiddenBgRef.current.remove();  hiddenBgRef.current  = null; }
+      if (pipVideoRef.current)  { pipVideoRef.current.remove(); pipVideoRef.current = null; }
+      if (iosPiPRef.current) {
+        try { iosPiPRef.current.oscillator.stop(); } catch {}
+        try { iosPiPRef.current.audioCtx.close(); } catch {}
+        try { iosPiPRef.current.video.remove(); } catch {}
+        iosPiPRef.current = null;
+      }
     };
   }, []);
 

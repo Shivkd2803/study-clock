@@ -356,7 +356,7 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
   const { w, h }   = useWindowSize();
   const landscape   = w > h;
   const containerRef    = useRef(null);
-  const bgVideoRef      = useRef(null); // ref to the background video for direct PiP
+  const bgVideoRef      = useRef(null); // ref to the bg <video> — used for iOS webkit PiP
   const fsListenerRef = useRef(false);
 
   useEffect(() => {
@@ -451,11 +451,21 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
   };
 
   const handlePiP = () => {
+    // enterPiP MUST be called synchronously inside the click handler
+    // prime() is called on mount — this is just a safety fallback for non-iOS
     if (enterPiP) enterPiP();
     onClose();
   };
 
-  const pipSupported = !!document.pictureInPictureEnabled;
+  // Safe runtime check — never runs at module load time
+  const pipSupported = (() => {
+    try {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      return !!document.pictureInPictureEnabled ||
+        (isIOS && !!HTMLVideoElement.prototype.webkitSetPresentationMode);
+    } catch { return false; }
+  })();
 
   // HH:MM format for fullscreen preview
   const fsH = Math.floor(time/3600);
@@ -508,7 +518,6 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
             playsInline
             preload="auto"
             controls={false}
-            crossOrigin="anonymous"
             className="w-full h-full object-cover"
             style={{ willChange: "transform" }}
           />
@@ -1446,10 +1455,11 @@ function MainLayout() {
   const { prime, enterPiP, exitPiP } = usePiPWidget({ clockStyle: pipClockStyle });
 
   const enterWidget = () => {
-    // Only works in Electron — hides main window and opens separate widget window
     if (!window.electron) return;
     setShowFSPreview(false);
-    window.electron.widget(); // main.js handles hide + open widget window
+    const { currentBackground, backgrounds, mode, time } = useStore.getState();
+    const bg = backgrounds[currentBackground];
+    window.electron.widget({ currentBackground, videoUrl: bg?.video || null, mode, time });
   };
 
   const openFullscreen = () => {

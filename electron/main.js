@@ -7,6 +7,10 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 let mainWin   = null;
 let widgetWin = null;
 
+// ── App state stored in main process memory ───────────────────────────────────
+// Widget window requests this on load via "get-widget-state" IPC
+let widgetState = { videoUrl: null };
+
 function createWindow() {
   mainWin = new BrowserWindow({
     width: 1600,
@@ -52,25 +56,21 @@ function createWindow() {
 }
 
 // ── Widget window ─────────────────────────────────────────────────────────────
-function createWidgetWindow() {
-  if (widgetWin) { widgetWin.focus(); return; }
+function createWidgetWindow(cb) {
+  if (widgetWin) { widgetWin.focus(); cb?.(); return; }
 
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   const W = 360, H = 200;
 
   widgetWin = new BrowserWindow({
-    width: W,
-    height: H,
-    x: width - W - 24,
-    y: height - H - 24,
-    frame: false,
-    transparent: true,
+    width: W, height: H,
+    x: width - W - 24, y: height - H - 24,
+    frame: false, transparent: true,
     backgroundColor: "#00000000",
-    alwaysOnTop: true,
-    resizable: false,
-    skipTaskbar: true,
-    hasShadow: true,
+    alwaysOnTop: true, resizable: false,
+    skipTaskbar: true, hasShadow: true,
     visibleOnAllWorkspaces: true,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -91,6 +91,11 @@ function createWidgetWindow() {
     widgetWin.loadFile(distPath, { hash: "/widget" });
   }
 
+  widgetWin.once("ready-to-show", () => {
+    widgetWin.show();
+    cb?.();
+  });
+
   widgetWin.on("closed", () => {
     widgetWin = null;
     if (mainWin) mainWin.show();
@@ -98,26 +103,40 @@ function createWidgetWindow() {
 }
 
 // ── IPC ───────────────────────────────────────────────────────────────────────
-ipcMain.on("window-minimize",  () => mainWin?.minimize());
-ipcMain.on("window-maximize",  () => {
+ipcMain.on("window-minimize", () => mainWin?.minimize());
+ipcMain.on("window-maximize", () => {
   if (mainWin?.isMaximized()) mainWin.unmaximize();
   else mainWin?.maximize();
 });
-ipcMain.on("window-close",     () => mainWin?.close());
+ipcMain.on("window-close", () => mainWin?.close());
 
-// Open separate widget window and hide main window
-ipcMain.on("window-widget",    () => {
-  createWidgetWindow();
-  if (mainWin) mainWin.hide();
+// Main window saves current video URL whenever background changes
+ipcMain.on("set-widget-state", (_, state) => {
+  widgetState = { ...widgetState, ...state };
+  // If widget is already open, push the update to it live
+  if (widgetWin) widgetWin.webContents.send("widget-state", widgetState);
 });
 
-// Close widget window and restore main window
-ipcMain.on("window-unwidget",  () => {
+// Widget window requests state on load — synchronous reply
+ipcMain.on("get-widget-state", (event) => {
+  event.returnValue = widgetState;
+});
+
+// Open widget window
+ipcMain.on("window-widget", (_, state) => {
+  if (state) widgetState = { ...widgetState, ...state };
+  createWidgetWindow(() => {
+    if (mainWin) mainWin.hide();
+  });
+});
+
+// Close widget and restore main
+ipcMain.on("window-unwidget", () => {
   if (widgetWin) { widgetWin.close(); widgetWin = null; }
   if (mainWin) mainWin.show();
 });
 
-// Widget window dragging
+// Widget dragging
 ipcMain.on("widget-drag", (_, { dx, dy }) => {
   if (!widgetWin) return;
   const [x, y] = widgetWin.getPosition();
@@ -125,11 +144,5 @@ ipcMain.on("widget-drag", (_, { dx, dy }) => {
 });
 
 app.whenReady().then(createWindow);
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
-
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
-});
+app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

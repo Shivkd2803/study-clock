@@ -27,10 +27,14 @@ export const useStore = create((set, get) => ({
   setBackground: (index) => {
     if (index === -1) {
       window.dispatchEvent(new Event("pause-main-audio"));
+      try { window.electron?.setWidgetState?.({ videoUrl: null }); } catch {}
       set({ currentBackground: index });
       return;
     }
     const name = get().backgrounds[index]?.name;
+    const videoUrl = get().backgrounds[index]?.video || null;
+    // Tell main process the current video URL — widget reads this via IPC
+    try { window.electron?.setWidgetState?.({ videoUrl }); } catch {}
     if (name) {
       const recents = [name, ...get().recentBackgrounds.filter(n => n !== name)].slice(0, 8);
       localStorage.setItem("recentBgs", JSON.stringify(recents));
