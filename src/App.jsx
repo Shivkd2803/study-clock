@@ -447,10 +447,15 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
   }, []);
 
   const handleClose = () => {
-    // Call enterPiP synchronously within user gesture context BEFORE onClose
+    onClose();
+  };
+
+  const handlePiP = () => {
     if (enterPiP) enterPiP();
     onClose();
   };
+
+  const pipSupported = !!document.pictureInPictureEnabled;
 
   // HH:MM format for fullscreen preview
   const fsH = Math.floor(time/3600);
@@ -575,13 +580,15 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
             key="fs-bottom-controls"
             initial={{opacity:0, scale:0.85}} animate={{opacity:1, scale:1}} exit={{opacity:0, scale:0.85}}
             transition={{duration:0.25}}
-            className="absolute bottom-5 left-5 z-20 flex items-center gap-3">
-            {/* Close / compress button */}
+            className="absolute bottom-5 left-5 z-20 flex items-center gap-2">
+
+            {/* Close / exit fullscreen button */}
             <button
               onClick={handleClose}
+              title="Exit fullscreen"
               className="flex items-center justify-center text-white transition-all active:scale-90"
-              style={{ background: "none", border: "none", padding: 8, filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.6))" }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              style={{ background:"rgba(0,0,0,0.35)", backdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:12, padding:10, filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.5))" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="4 14 10 14 10 20"/>
                 <polyline points="20 10 14 10 14 4"/>
                 <line x1="10" y1="14" x2="3" y2="21"/>
@@ -589,17 +596,33 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
               </svg>
             </button>
 
-            {/* Widget Mode button — all devices */}
-            {onEnterWidget && (
+            {/* Picture-in-Picture button — web/mobile only, only if browser supports it */}
+            {enterPiP && pipSupported && (
+              <button
+                onClick={handlePiP}
+                title="Picture in Picture"
+                className="flex items-center justify-center text-white transition-all active:scale-90"
+                style={{ background:"rgba(0,0,0,0.35)", backdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:12, padding:10, filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.5))" }}>
+                {/* PiP icon: screen with small inset rectangle */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2"/>
+                  <rect x="12" y="11" width="8" height="6" rx="1.5" fill="currentColor" stroke="none"/>
+                </svg>
+              </button>
+            )}
+
+            {/* Widget Mode button — Electron desktop only */}
+            {onEnterWidget && window.electron && (
               <button
                 onClick={() => {
                   fsListenerRef.current = false;
                   onClose();
                   onEnterWidget();
                 }}
-                className="flex items-center justify-center text-white/80 hover:text-white transition-all active:scale-90"
-                style={{ background:"none", border:"none", padding:8, cursor:"pointer", filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.6))" }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                title="Widget mode"
+                className="flex items-center justify-center text-white transition-all active:scale-90"
+                style={{ background:"rgba(0,0,0,0.35)", backdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:12, padding:10, filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.5))" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="3" width="20" height="15" rx="2"/>
                   <rect x="13" y="10" width="7" height="5" rx="1" fill="currentColor" stroke="none"/>
                 </svg>
@@ -1415,7 +1438,6 @@ function MainLayout() {
   const [showSetTime,   setShowSetTime]   = useState(false);
   const [showFSPreview, setShowFSPreview] = useState(false);
   const [showSidebar,   setShowSidebar]   = useState(false);
-  const [widgetMode,    setWidgetMode]    = useState(false);
 
   const bgVideoRef = useRef(null);
 
@@ -1424,14 +1446,10 @@ function MainLayout() {
   const { prime, enterPiP, exitPiP } = usePiPWidget({ clockStyle: pipClockStyle });
 
   const enterWidget = () => {
+    // Only works in Electron — hides main window and opens separate widget window
+    if (!window.electron) return;
     setShowFSPreview(false);
-    setWidgetMode(true);
-    window.electron?.widget?.();
-  };
-
-  const exitWidget = () => {
-    setWidgetMode(false);
-    window.electron?.unwidget?.();
+    window.electron.widget(); // main.js handles hide + open widget window
   };
 
   const openFullscreen = () => {
@@ -1461,29 +1479,12 @@ function MainLayout() {
 
   // Breakpoints
   const isPortrait = h > w;
-  const isPhoneLandscape = !isPortrait && h < 500; // phone rotated sideways
-  const isTabletLandscape = !isPortrait && h >= 500 && w < 1100; // tablet rotated sideways
-  const isPhone   = w < 640 && isPortrait;         // portrait phone only
-  const isTablet  = (w >= 640 && w < 1100) && isPortrait; // tablet portrait only
-  const isDesktop = w >= 1100 || isPhoneLandscape || isTabletLandscape; // pc + any landscape tablet/phone
+  const isPhoneLandscape = !isPortrait && h < 500;
+  const isTabletLandscape = !isPortrait && h >= 500 && w < 1100;
+  const isPhone   = w < 640 && isPortrait;
+  const isTablet  = (w >= 640 && w < 1100) && isPortrait;
+  const isDesktop = w >= 1100 || isPhoneLandscape || isTabletLandscape;
 
-  // Desktop only: open Electron widget window on minimize
-  useEffect(() => {
-    if (!isDesktop || !window.electron) return;
-    const onHide = () => { if (document.visibilityState === "hidden") window.electron.widget(); };
-    document.addEventListener("visibilitychange", onHide);
-    return () => document.removeEventListener("visibilitychange", onHide);
-  }, [isDesktop]);
-
-  // Desktop only: auto widget when tab/window is hidden (minimized)
-  useEffect(() => {
-    if (!isDesktop) return;
-    const onHide = () => {
-      if (document.visibilityState === "hidden" && !document.fullscreenElement && !document.webkitFullscreenElement) enterWidget();
-    };
-    document.addEventListener("visibilitychange", onHide);
-    return () => document.removeEventListener("visibilitychange", onHide);
-  }, [isDesktop]);
   const clockFs = isPhone
     ? Math.min(w * 0.30, 160)
     : isTablet
@@ -1540,9 +1541,6 @@ function MainLayout() {
       className="fixed inset-0 bg-[#080d08] overflow-hidden"
       style={{ fontFamily: "'DM Sans', sans-serif" }}
     >
-      {widgetMode ? (
-        <WidgetView onExpand={exitWidget} />
-      ) : (
       <>
       {/* VIDEO — true full screen for ALL sizes */}
       <div className="absolute inset-0" style={{ willChange: "transform", isolation: "isolate" }}>
@@ -1664,11 +1662,10 @@ function MainLayout() {
       </div>
 
       <AnimatePresence>{showSetTime   && <SetTimeSheet onClose={()=>setShowSetTime(false)}/>}</AnimatePresence>
-      <AnimatePresence>{showFSPreview && <FSPreview onClose={()=>setShowFSPreview(false)} isDesktop={isDesktop} onEnterWidget={enterWidget} enterPiP={!isDesktop ? enterPiP : null} prime={!isDesktop ? prime : null}/>}</AnimatePresence>
+      <AnimatePresence>{showFSPreview && <FSPreview onClose={()=>setShowFSPreview(false)} isDesktop={isDesktop} onEnterWidget={enterWidget} enterPiP={enterPiP} prime={prime}/>}</AnimatePresence>
       <AnimatePresence>{showExplore   && <ExploreModal onClose={()=>setShowExplore(false)} desktop={!isPhone}/>}</AnimatePresence>
       {isDesktop && <DesktopSidebar open={showSidebar} onClose={()=>setShowSidebar(false)} onViewAll={()=>setShowExplore(true)}/>}
       </>
-      )}
     </div>
   );
 }

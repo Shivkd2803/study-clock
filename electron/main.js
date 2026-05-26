@@ -91,7 +91,10 @@ function createWidgetWindow() {
     widgetWin.loadFile(distPath, { hash: "/widget" });
   }
 
-  widgetWin.on("closed", () => { widgetWin = null; });
+  widgetWin.on("closed", () => {
+    widgetWin = null;
+    if (mainWin) mainWin.show();
+  });
 }
 
 // ── IPC ───────────────────────────────────────────────────────────────────────
@@ -102,12 +105,16 @@ ipcMain.on("window-maximize",  () => {
 });
 ipcMain.on("window-close",     () => mainWin?.close());
 
-// Open separate widget window
-ipcMain.on("window-widget",    () => createWidgetWindow());
+// Open separate widget window and hide main window
+ipcMain.on("window-widget",    () => {
+  createWidgetWindow();
+  if (mainWin) mainWin.hide();
+});
 
-// Close widget window
+// Close widget window and restore main window
 ipcMain.on("window-unwidget",  () => {
   if (widgetWin) { widgetWin.close(); widgetWin = null; }
+  if (mainWin) mainWin.show();
 });
 
 // Widget window dragging

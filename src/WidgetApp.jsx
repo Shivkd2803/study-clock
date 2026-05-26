@@ -155,9 +155,28 @@ export default function WidgetApp() {
         fontFamily:"'DM Sans',sans-serif",
       }}>
 
-      {/* Close button */}
+      {/* Expand button — restores main window, closes widget */}
       <button
         onClick={() => window.electron?.unwidget?.()}
+        title="Restore main window"
+        style={{
+          position:"absolute", top:8, left:8, width:24, height:24,
+          borderRadius:6, border:"1px solid rgba(255,255,255,0.15)", cursor:"pointer",
+          background:"rgba(0,0,0,0.4)", color:"rgba(255,255,255,0.7)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="15 3 21 3 21 9"/>
+          <polyline points="9 21 3 21 3 15"/>
+          <line x1="21" y1="3" x2="14" y2="10"/>
+          <line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
+      </button>
+
+      {/* Close button — closes widget AND restores main window */}
+      <button
+        onClick={() => window.electron?.unwidget?.()}
+        title="Close widget"
         style={{
           position:"absolute", top:8, right:8, width:22, height:22,
           borderRadius:"50%", border:"none", cursor:"pointer",
