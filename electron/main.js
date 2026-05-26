@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, protocol } = require("electron");
+const { app, BrowserWindow, ipcMain, screen } = require("electron");
 const path = require("path");
 const { existsSync } = require("fs");
 
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
-let mainWin = null;
+let mainWin   = null;
+let widgetWin = null;
 
 function createWindow() {
   mainWin = new BrowserWindow({
@@ -30,38 +31,91 @@ function createWindow() {
     mainWin.loadURL("http://localhost:5173");
   } else {
     mainWin.loadFile(distPath);
-
-    // Intercept file protocol to remap absolute paths to dist folder
     mainWin.webContents.session.protocol.interceptFileProtocol(
       "file",
       (request, callback) => {
         let url = request.url.replace(/^file:\/\//, "");
         url = decodeURIComponent(url);
-
-        if (existsSync(url)) {
-          return callback(url);
-        }
-
-        // Strip Windows drive letter and remap to dist
+        if (existsSync(url)) return callback(url);
         const stripped = url.replace(/^\/[A-Za-z]:/, "").replace(/^\//, "");
         const distFile = path.join(__dirname, "../dist", stripped);
-
-        if (existsSync(distFile)) {
-          return callback(distFile);
-        }
-
+        if (existsSync(distFile)) return callback(distFile);
         callback(url);
       }
     );
   }
+
+  mainWin.on("closed", () => {
+    mainWin = null;
+    if (widgetWin) { widgetWin.close(); widgetWin = null; }
+  });
 }
 
-ipcMain.on("window-minimize", () => mainWin?.minimize());
-ipcMain.on("window-maximize", () => {
+// ── Widget window ─────────────────────────────────────────────────────────────
+function createWidgetWindow() {
+  if (widgetWin) { widgetWin.focus(); return; }
+
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const W = 360, H = 200;
+
+  widgetWin = new BrowserWindow({
+    width: W,
+    height: H,
+    x: width - W - 24,
+    y: height - H - 24,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    alwaysOnTop: true,
+    resizable: false,
+    skipTaskbar: true,
+    hasShadow: true,
+    visibleOnAllWorkspaces: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: false,
+    },
+  });
+
+  widgetWin.setAlwaysOnTop(true, "floating");
+  widgetWin.setVisibleOnAllWorkspaces(true);
+
+  const distPath = path.join(__dirname, "../dist/index.html");
+  const isDev = !existsSync(distPath);
+
+  if (isDev) {
+    widgetWin.loadURL("http://localhost:5173/#/widget");
+  } else {
+    widgetWin.loadFile(distPath, { hash: "/widget" });
+  }
+
+  widgetWin.on("closed", () => { widgetWin = null; });
+}
+
+// ── IPC ───────────────────────────────────────────────────────────────────────
+ipcMain.on("window-minimize",  () => mainWin?.minimize());
+ipcMain.on("window-maximize",  () => {
   if (mainWin?.isMaximized()) mainWin.unmaximize();
   else mainWin?.maximize();
 });
-ipcMain.on("window-close", () => mainWin?.close());
+ipcMain.on("window-close",     () => mainWin?.close());
+
+// Open separate widget window
+ipcMain.on("window-widget",    () => createWidgetWindow());
+
+// Close widget window
+ipcMain.on("window-unwidget",  () => {
+  if (widgetWin) { widgetWin.close(); widgetWin = null; }
+});
+
+// Widget window dragging
+ipcMain.on("widget-drag", (_, { dx, dy }) => {
+  if (!widgetWin) return;
+  const [x, y] = widgetWin.getPosition();
+  widgetWin.setPosition(x + dx, y + dy);
+});
 
 app.whenReady().then(createWindow);
 

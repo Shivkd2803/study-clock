@@ -1,0 +1,182 @@
+import { useState, useEffect, useRef } from "react";
+import { useStore } from "./store/useStore";
+import { motion, AnimatePresence } from "framer-motion";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function useLiveClock() {
+  const get = () => {
+    const now = new Date();
+    const t = now.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", hour12:true });
+    const parts = t.split(" ");
+    const [h, m] = (parts[0]||"12:00").split(":");
+    return { h, m, ampm: parts[1]||"AM", full: parts[0]||"12:00" };
+  };
+  const [t, setT] = useState(get);
+  useEffect(() => { const iv = setInterval(() => setT(get()), 1000); return () => clearInterval(iv); }, []);
+  return t;
+}
+
+function fmtTime(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+  return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+// ─── Flip card ────────────────────────────────────────────────────────────────
+function FlipCard({ value, size }) {
+  const [cur, setCur] = useState(value);
+  const [nxt, setNxt] = useState(value);
+  const [flip, setFlip] = useState(false);
+
+  useEffect(() => {
+    if (value === cur) return;
+    setNxt(value); setFlip(true);
+    const t = setTimeout(() => { setCur(value); setFlip(false); }, 380);
+    return () => clearTimeout(t);
+  }, [value]);
+
+  const w = size * 1.55, h = size, r = size * 0.1, fs = size * 0.52;
+  const ns = { fontSize:fs, fontWeight:800, color:"#fff", lineHeight:1, fontFamily:"'DM Sans',sans-serif", letterSpacing:"-0.02em" };
+  const glass = { backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", background:"rgba(20,20,20,0.7)", border:"1px solid rgba(255,255,255,0.1)" };
+
+  return (
+    <div style={{ width:w, height:h, position:"relative" }}>
+      <div style={{ position:"absolute", top:0, left:0, width:w, height:h/2, ...glass, borderRadius:`${r}px ${r}px 0 0`, overflow:"hidden", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+        <span style={{...ns, transform:"translateY(50%)"}}>{cur}</span>
+      </div>
+      <div style={{ position:"absolute", bottom:0, left:0, width:w, height:h/2, ...glass, borderRadius:`0 0 ${r}px ${r}px`, overflow:"hidden", display:"flex", alignItems:"flex-start", justifyContent:"center" }}>
+        <span style={{...ns, transform:"translateY(-50%)"}}>{nxt}</span>
+      </div>
+      {flip && (
+        <motion.div initial={{rotateX:0}} animate={{rotateX:-90}} transition={{duration:0.19, ease:"easeIn"}}
+          style={{ position:"absolute", top:0, left:0, width:w, height:h/2, ...glass, borderRadius:`${r}px ${r}px 0 0`, overflow:"hidden", transformOrigin:"50% 100%", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:3 }}>
+          <span style={{...ns, transform:"translateY(50%)"}}>{cur}</span>
+        </motion.div>
+      )}
+      {flip && (
+        <motion.div initial={{rotateX:90}} animate={{rotateX:0}} transition={{duration:0.19, ease:"easeOut", delay:0.19}}
+          style={{ position:"absolute", bottom:0, left:0, width:w, height:h/2, ...glass, borderRadius:`0 0 ${r}px ${r}px`, overflow:"hidden", transformOrigin:"50% 0%", display:"flex", alignItems:"flex-start", justifyContent:"center", zIndex:3 }}>
+          <span style={{...ns, transform:"translateY(-50%)"}}>{nxt}</span>
+        </motion.div>
+      )}
+      <div style={{ position:"absolute", top:"50%", left:0, right:0, height:2, background:"#000", zIndex:4, transform:"translateY(-50%)" }}/>
+      <div style={{ position:"absolute", top:"50%", left:w*0.07, transform:"translateY(-50%)", zIndex:5, width:size*0.06, height:size*0.06, borderRadius:"50%", background:"#2a2a2a", border:"1px solid #444" }}/>
+      <div style={{ position:"absolute", top:"50%", right:w*0.07, transform:"translateY(-50%)", zIndex:5, width:size*0.06, height:size*0.06, borderRadius:"50%", background:"#2a2a2a", border:"1px solid #444" }}/>
+    </div>
+  );
+}
+
+// ─── Widget App ───────────────────────────────────────────────────────────────
+export default function WidgetApp() {
+  const mode = useStore(s => s.mode);
+  const time = useStore(s => s.time);
+  const clock = useLiveClock();
+  const [style, setStyle] = useState(() => { try { return parseInt(localStorage.getItem("lsc_last_clock_style"))||0; } catch { return 0; } });
+
+  // Drag support for Electron
+  const dragRef  = useRef(null);
+  const lastPos  = useRef(null);
+
+  const onMouseDown = (e) => {
+    if (e.target.closest("button")) return;
+    lastPos.current = { x: e.screenX, y: e.screenY };
+    const onMove = (e2) => {
+      if (!lastPos.current) return;
+      const dx = e2.screenX - lastPos.current.x;
+      const dy = e2.screenY - lastPos.current.y;
+      lastPos.current = { x: e2.screenX, y: e2.screenY };
+      window.electron?.widgetDrag(dx, dy);
+    };
+    const onUp = () => { lastPos.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  // Swipe to switch style (mobile PiP)
+  const touchX = useRef(null);
+  const onTouchStart = e => { touchX.current = e.touches[0].clientX; };
+  const onTouchEnd   = e => {
+    if (touchX.current === null) return;
+    const dx = touchX.current - e.changedTouches[0].clientX;
+    if (Math.abs(dx) > 40) {
+      const ns = style === 0 ? 1 : 0;
+      setStyle(ns);
+      try { localStorage.setItem("lsc_last_clock_style", String(ns)); } catch {}
+    }
+    touchX.current = null;
+  };
+
+  const isTimer = mode !== "clock";
+  const timerStr = fmtTime(time);
+  const cardSize = 56;
+
+  const renderClock = () => {
+    const hStr = clock.h.padStart(2,"0");
+    const mStr = clock.m.padStart(2,"0");
+
+    if (style === 1) {
+      return (
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <FlipCard value={isTimer ? timerStr.split(":")[0] : hStr} size={cardSize}/>
+          <FlipCard value={isTimer ? timerStr.split(":")[1] : mStr} size={cardSize}/>
+          {!isTimer && <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)", fontFamily:"'DM Sans',sans-serif", marginLeft:4 }}>{clock.ampm}</span>}
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
+        <span style={{ fontSize:52, fontWeight:800, color:"#fff", fontFamily:"'DM Sans',sans-serif", lineHeight:1, textShadow:"0 2px 20px rgba(0,0,0,0.8)", letterSpacing:"-0.02em" }}>
+          {isTimer ? timerStr : `${hStr}:${mStr}`}
+        </span>
+        <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)", fontFamily:"'DM Sans',sans-serif", marginTop:4 }}>
+          {isTimer ? (mode === "short" ? "Short Timer" : "Timer") : clock.ampm}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      ref={dragRef}
+      onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      style={{
+        width:"100vw", height:"100vh", borderRadius:18, overflow:"hidden",
+        background:"rgba(8,13,8,0.82)", backdropFilter:"blur(32px) saturate(180%)",
+        WebkitBackdropFilter:"blur(32px) saturate(180%)",
+        border:"1px solid rgba(255,255,255,0.12)",
+        boxShadow:"0 8px 40px rgba(0,0,0,0.6)",
+        display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+        position:"relative", cursor:"move", userSelect:"none",
+        fontFamily:"'DM Sans',sans-serif",
+      }}>
+
+      {/* Close button */}
+      <button
+        onClick={() => window.electron?.unwidget?.()}
+        style={{
+          position:"absolute", top:8, right:8, width:22, height:22,
+          borderRadius:"50%", border:"none", cursor:"pointer",
+          background:"rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.6)",
+          display:"flex", alignItems:"center", justifyContent:"center", fontSize:12,
+        }}>✕</button>
+
+      {/* Style dot indicators */}
+      <div style={{ position:"absolute", bottom:8, left:"50%", transform:"translateX(-50%)", display:"flex", gap:4 }}>
+        {[0,1].map(i => (
+          <div key={i} onClick={() => setStyle(i)} style={{
+            width: i === style ? 14 : 5, height:5, borderRadius:3,
+            background: i === style ? "#f0ede8" : "rgba(255,255,255,0.3)",
+            transition:"all 0.3s", cursor:"pointer",
+          }}/>
+        ))}
+      </div>
+
+      {renderClock()}
+    </div>
+  );
+}

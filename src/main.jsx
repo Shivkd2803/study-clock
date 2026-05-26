@@ -3,27 +3,30 @@ import React, { useState, useEffect, lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/globals.css";
 
-const App           = lazy(() => import("./App"));
+const App            = lazy(() => import("./App"));
 const AdminDashboard = lazy(() => import("./AdminDashboard"));
+const WidgetApp      = lazy(() => import("./WidgetApp"));
 
-const Loader = () => (
-  <div style={{ minHeight:"100vh", background:"#080d08" }}/>
-);
+const Loader = () => <div style={{ minHeight:"100vh", background:"#080d08" }}/>;
 
 function Root() {
   const [hash, setHash] = useState(window.location.hash);
-
   useEffect(() => {
     const onHash = () => setHash(window.location.hash);
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  const isAdmin = hash === "#/admin" || hash === "#/admin/";
-
+  if (hash === "#/admin" || hash === "#/admin/") {
+    return <Suspense fallback={<Loader/>}><AdminDashboard/></Suspense>;
+  }
+  if (hash === "#/widget" || hash === "#/widget/") {
+    return <Suspense fallback={<Loader/>}><WidgetApp/></Suspense>;
+  }
   return (
     <Suspense fallback={<Loader/>}>
-      {isAdmin ? <AdminDashboard/> : <><App/><Analytics/></>}
+      <App/>
+      <Analytics/>
     </Suspense>
   );
 }

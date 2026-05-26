@@ -347,7 +347,7 @@ function SetTimeSheet({ onClose }) {
 }
 
 // ─── FULLSCREEN PREVIEW ───────────────────────────────────────────────────────
-function FSPreview({ onClose }) {
+function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime }) {
   const backgrounds = useStore((s) => s.backgrounds);
   const current     = useStore((s) => s.currentBackground);
   const mode        = useStore((s) => s.mode);
@@ -355,7 +355,8 @@ function FSPreview({ onClose }) {
   const clock       = useLiveClock();
   const { w, h }   = useWindowSize();
   const landscape   = w > h;
-  const containerRef = useRef(null);
+  const containerRef    = useRef(null);
+  const bgVideoRef      = useRef(null); // ref to the background video for direct PiP
   const fsListenerRef = useRef(false);
 
   useEffect(() => {
@@ -371,6 +372,9 @@ function FSPreview({ onClose }) {
       document.addEventListener("fullscreenchange", onFSChange);
       document.addEventListener("webkitfullscreenchange", onFSChange);
     }, 300);
+
+    // Prime PiP as soon as FSPreview mounts (early prep)
+    if (prime) prime();
 
     return () => {
       fsListenerRef.current = false;
@@ -442,7 +446,11 @@ function FSPreview({ onClose }) {
     };
   }, []);
 
-  const handleClose = onClose;
+  const handleClose = () => {
+    // Call enterPiP synchronously within user gesture context BEFORE onClose
+    if (enterPiP) enterPiP();
+    onClose();
+  };
 
   // HH:MM format for fullscreen preview
   const fsH = Math.floor(time/3600);
@@ -477,7 +485,7 @@ function FSPreview({ onClose }) {
 
   return (
     <motion.div ref={containerRef} className="fixed inset-0 z-[2000] bg-black overflow-hidden"
-      initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.3}}
+      initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0}}
       onMouseMove={resetHideTimer}
       onTouchStart={(e) => { resetHideTimer(); onSwipeStart(e); }}
       onTouchEnd={onSwipeEnd}
@@ -485,9 +493,20 @@ function FSPreview({ onClose }) {
       onMouseUp={onSwipeEnd}>
       <div className="absolute inset-0">
         {bg && (
-          <video autoPlay loop muted playsInline controls={false} disablePictureInPicture className="w-full h-full object-cover">
-            <source src={bg.video} type="video/mp4"/>
-          </video>
+          <video
+            ref={bgVideoRef}
+            key={bg.video}
+            src={bg.video}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            controls={false}
+            crossOrigin="anonymous"
+            className="w-full h-full object-cover"
+            style={{ willChange: "transform" }}
+          />
         )}
         <div className="absolute inset-0 bg-black/20"/>
       </div>
@@ -552,20 +571,41 @@ function FSPreview({ onClose }) {
       </AnimatePresence>
       <AnimatePresence>
         {uiVisible && (
-          <motion.button
-            key="fs-close-btn"
+          <motion.div
+            key="fs-bottom-controls"
             initial={{opacity:0, scale:0.85}} animate={{opacity:1, scale:1}} exit={{opacity:0, scale:0.85}}
             transition={{duration:0.25}}
-            onClick={handleClose}
-            className="absolute bottom-5 left-5 z-20 flex items-center justify-center text-white transition-all active:scale-90"
-            style={{ background: "none", border: "none", padding: 8, filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.6))" }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="4 14 10 14 10 20"/>
-              <polyline points="20 10 14 10 14 4"/>
-              <line x1="10" y1="14" x2="3" y2="21"/>
-              <line x1="21" y1="3" x2="14" y2="10"/>
-            </svg>
-          </motion.button>
+            className="absolute bottom-5 left-5 z-20 flex items-center gap-3">
+            {/* Close / compress button */}
+            <button
+              onClick={handleClose}
+              className="flex items-center justify-center text-white transition-all active:scale-90"
+              style={{ background: "none", border: "none", padding: 8, filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.6))" }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="4 14 10 14 10 20"/>
+                <polyline points="20 10 14 10 14 4"/>
+                <line x1="10" y1="14" x2="3" y2="21"/>
+                <line x1="21" y1="3" x2="14" y2="10"/>
+              </svg>
+            </button>
+
+            {/* Widget Mode button — all devices */}
+            {onEnterWidget && (
+              <button
+                onClick={() => {
+                  fsListenerRef.current = false;
+                  onClose();
+                  onEnterWidget();
+                }}
+                className="flex items-center justify-center text-white/80 hover:text-white transition-all active:scale-90"
+                style={{ background:"none", border:"none", padding:8, cursor:"pointer", filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.6))" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="15" rx="2"/>
+                  <rect x="13" y="10" width="7" height="5" rx="1" fill="currentColor" stroke="none"/>
+                </svg>
+              </button>
+            )}
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
@@ -1095,9 +1135,14 @@ function ExploreModal({ onClose, desktop=false }) {
             initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
             <motion.div initial={{scale:0.9}} animate={{scale:1}} exit={{scale:0.9}}
               className="relative w-[92vw] rounded-[28px] overflow-hidden border border-[#f0ede8]/30" style={{height:"58vh"}}>
-              <video autoPlay loop muted playsInline controls={false} className="absolute inset-0 w-full h-full object-cover">
-                <source src={preview.video} type="video/mp4"/>
-              </video>
+              <video
+                key={preview.video}
+                src={preview.video}
+                autoPlay loop muted playsInline controls={false}
+                preload="auto"
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ willChange: "transform" }}
+              />
               <div className="absolute inset-0 bg-black/30"/>
               <div className="absolute top-5 left-5 z-20">
                 <h2 className="text-white text-xl font-bold">{preview.name}</h2>
@@ -1296,6 +1341,69 @@ function useTimerEndBeep(time, mode) {
   }, [time, mode]);
 }
 
+// ─── WIDGET VIEW ─────────────────────────────────────────────────────────────
+// Shown when the Electron window has been shrunk to 320×180 widget size.
+// Fills the entire small window with video bg + clock, plus an expand button.
+function WidgetView({ onExpand }) {
+  const clock      = useLiveClock();
+  const mode       = useStore((s) => s.mode);
+  const time       = useStore((s) => s.time);
+  const backgrounds   = useStore((s) => s.backgrounds);
+  const currentBg  = useStore((s) => s.currentBackground);
+  const bg         = currentBg !== -1 ? backgrounds[currentBg] : null;
+
+  const timerH = Math.floor(time / 3600);
+  const timerM = Math.floor((time % 3600) / 60);
+  const timerS = time % 60;
+  const timerFmt = timerH > 0
+    ? `${String(timerH).padStart(2,"0")}:${String(timerM).padStart(2,"0")}`
+    : `${String(timerM).padStart(2,"0")}:${String(timerS).padStart(2,"0")}`;
+
+  const displayText = mode === "clock" ? clock.full : timerFmt;
+  const displaySub  = mode === "clock" ? clock.ampm : (mode === "short" ? "SHORT TIMER" : "TIMER");
+
+  return (
+    <div className="fixed inset-0 overflow-hidden"
+      style={{ fontFamily: "'DM Sans', sans-serif", borderRadius: 16, background: "#080d08" }}>
+      {/* Background video */}
+      {bg && (
+        <video
+          key={bg.video}
+          src={bg.video}
+          autoPlay loop muted playsInline preload="auto"
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ willChange: "transform" }}
+        />
+      )}
+      <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.38)" }}/>
+
+      {/* Clock */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
+        <span className="text-white font-bold drop-shadow-lg leading-none"
+          style={{ fontSize: 52, letterSpacing: "-0.02em" }}>
+          {displayText}
+        </span>
+        <span className="text-white/70 font-medium mt-1" style={{ fontSize: 13, letterSpacing: "0.12em" }}>
+          {displaySub}
+        </span>
+      </div>
+
+      {/* Expand button — top right */}
+      <button
+        onClick={onExpand}
+        className="absolute top-2 right-2 z-20 flex items-center justify-center text-white/60 hover:text-white transition-all active:scale-90"
+        style={{ background: "rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, width: 28, height: 28 }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="15 3 21 3 21 9"/>
+          <polyline points="9 21 3 21 3 15"/>
+          <line x1="21" y1="3" x2="14" y2="10"/>
+          <line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 // ─── MAIN LAYOUT (used for ALL sizes) ────────────────────────────────────────
 function MainLayout() {
   const mode    = useStore((s) => s.mode);
@@ -1307,9 +1415,29 @@ function MainLayout() {
   const [showSetTime,   setShowSetTime]   = useState(false);
   const [showFSPreview, setShowFSPreview] = useState(false);
   const [showSidebar,   setShowSidebar]   = useState(false);
-  const { enterPiP } = usePiPWidget();
+  const [widgetMode,    setWidgetMode]    = useState(false);
+
+  const bgVideoRef = useRef(null);
+
+  // Get last used clock style for PiP
+  const pipClockStyle = (() => { try { return parseInt(localStorage.getItem("lsc_last_clock_style"))||0; } catch { return 0; } })();
+  const { prime, enterPiP, exitPiP } = usePiPWidget({ clockStyle: pipClockStyle });
+
+  const enterWidget = () => {
+    setShowFSPreview(false);
+    setWidgetMode(true);
+    window.electron?.widget?.();
+  };
+
+  const exitWidget = () => {
+    setWidgetMode(false);
+    window.electron?.unwidget?.();
+  };
+
   const openFullscreen = () => {
     setShowFSPreview(true);
+    // Prime PiP immediately on same tick as user gesture
+    prime();
     // Request native fullscreen immediately from user gesture
     const el = document.documentElement;
     try {
@@ -1339,10 +1467,20 @@ function MainLayout() {
   const isTablet  = (w >= 640 && w < 1100) && isPortrait; // tablet portrait only
   const isDesktop = w >= 1100 || isPhoneLandscape || isTabletLandscape; // pc + any landscape tablet/phone
 
-  // Desktop only: auto PiP when tab/window is hidden (minimized)
+  // Desktop only: open Electron widget window on minimize
+  useEffect(() => {
+    if (!isDesktop || !window.electron) return;
+    const onHide = () => { if (document.visibilityState === "hidden") window.electron.widget(); };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [isDesktop]);
+
+  // Desktop only: auto widget when tab/window is hidden (minimized)
   useEffect(() => {
     if (!isDesktop) return;
-    const onHide = () => { if (document.visibilityState === "hidden") enterPiP(); };
+    const onHide = () => {
+      if (document.visibilityState === "hidden" && !document.fullscreenElement && !document.webkitFullscreenElement) enterWidget();
+    };
     document.addEventListener("visibilitychange", onHide);
     return () => document.removeEventListener("visibilitychange", onHide);
   }, [isDesktop]);
@@ -1398,10 +1536,16 @@ function MainLayout() {
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-[#080d08] overflow-hidden" style={{fontFamily:"'DM Sans', sans-serif"}}>
-      
+    <div
+      className="fixed inset-0 bg-[#080d08] overflow-hidden"
+      style={{ fontFamily: "'DM Sans', sans-serif" }}
+    >
+      {widgetMode ? (
+        <WidgetView onExpand={exitWidget} />
+      ) : (
+      <>
       {/* VIDEO — true full screen for ALL sizes */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0" style={{ willChange: "transform", isolation: "isolate" }}>
         {/* Default wallpaper — shown when no ambience is selected */}
         {currentBg === -1 && (
           <img
@@ -1520,9 +1664,11 @@ function MainLayout() {
       </div>
 
       <AnimatePresence>{showSetTime   && <SetTimeSheet onClose={()=>setShowSetTime(false)}/>}</AnimatePresence>
-      <AnimatePresence>{showFSPreview && <FSPreview onClose={()=>{ setShowFSPreview(false); if(!isDesktop) enterPiP(); }}/>}</AnimatePresence>
+      <AnimatePresence>{showFSPreview && <FSPreview onClose={()=>setShowFSPreview(false)} isDesktop={isDesktop} onEnterWidget={enterWidget} enterPiP={!isDesktop ? enterPiP : null} prime={!isDesktop ? prime : null}/>}</AnimatePresence>
       <AnimatePresence>{showExplore   && <ExploreModal onClose={()=>setShowExplore(false)} desktop={!isPhone}/>}</AnimatePresence>
       {isDesktop && <DesktopSidebar open={showSidebar} onClose={()=>setShowSidebar(false)} onViewAll={()=>setShowExplore(true)}/>}
+      </>
+      )}
     </div>
   );
 }
