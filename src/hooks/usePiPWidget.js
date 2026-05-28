@@ -39,26 +39,40 @@ function fmtTime(secs) {
 }
 
 function drawBg(ctx, w, h) {
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "#0d1a0d");
-  grad.addColorStop(1, "#080d08");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
-  const vignette = ctx.createRadialGradient(w/2, h/2, h*0.1, w/2, h/2, h*0.85);
-  vignette.addColorStop(0, "rgba(0,0,0,0)");
-  vignette.addColorStop(1, "rgba(0,0,0,0.55)");
-  ctx.fillStyle = vignette;
+  // Pure black background — no green tint
+  ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, w, h);
 }
 
-function drawFlipCard(ctx, x, y, size, text, ampm) {
+// ─── Flip animation state (module-level, shared across frames) ───────────────
+const flipState = {}; // key: "h" | "m" → { from, to, startTime, duration }
+
+function getFlipProgress(key, newVal, now) {
+  const s = flipState[key];
+  if (!s || s.to !== newVal) return { flipping: false, cur: newVal };
+  const t = Math.min(1, (now - s.startTime) / s.duration);
+  if (t >= 1) { delete flipState[key]; return { flipping: false, cur: newVal }; }
+  return { flipping: true, cur: s.from, next: newVal, t };
+}
+
+function triggerFlip(key, from, to, now) {
+  if (from === to) return;
+  if (flipState[key]?.to === to) return; // already flipping to this value
+  flipState[key] = { from, to, startTime: now, duration: 420 };
+}
+
+// Easing
+function easeIn(t)  { return t * t; }
+function easeOut(t) { return 1 - (1-t) * (1-t); }
+
+function drawFlipCard(ctx, x, y, size, text, ampm, now) {
   const w = size, h = size;
   const r = size * 0.08;
   const fs = size * 0.52;
-  const glass = "rgba(30,30,30,0.55)";
-  const border = "rgba(255,255,255,0.08)";
+  const glassFill = "rgba(28,28,28,0.92)";
+  const border = "rgba(255,255,255,0.10)";
 
-  // Helper: rounded rect path
+  // Rounded rect helper
   const rr = (cx, cy, cw, ch, tl, tr, bl, br) => {
     ctx.beginPath();
     ctx.moveTo(cx + tl, cy);
@@ -73,53 +87,132 @@ function drawFlipCard(ctx, x, y, size, text, ampm) {
     ctx.closePath();
   };
 
-  // Top half panel
-  rr(x, y, w, h / 2, r, r, 0, 0);
-  ctx.fillStyle = glass;
-  ctx.fill();
-  ctx.strokeStyle = border;
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // Draw a half panel (top or bottom) with a number centered at its midpoint
+  const drawHalf = (val, isTop) => {
+    const py = isTop ? y : y + h / 2;
+    const ph = h / 2;
+    if (isTop) rr(x, py, w, ph, r, r, 0, 0);
+    else       rr(x, py, w, ph, 0, 0, r, r);
+    ctx.fillStyle = glassFill;
+    ctx.fill();
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-  // Bottom half panel
-  rr(x, y + h / 2, w, h / 2, 0, 0, r, r);
-  ctx.fillStyle = glass;
-  ctx.fill();
-  ctx.strokeStyle = border;
-  ctx.stroke();
+    // Clip and draw number
+    ctx.save();
+    if (isTop) rr(x, py, w, ph, r, r, 0, 0);
+    else       rr(x, py, w, ph, 0, 0, r, r);
+    ctx.clip();
+    ctx.fillStyle = "#fff";
+    ctx.font = `800 ${fs}px 'Outfit','DM Sans',Arial,sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
+    ctx.shadowBlur = 10;
+    ctx.fillText(val, x + w / 2, isTop ? y + h * 0.5 : y + h * 0.5);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  };
+
+  // Scaled top-half panel for flip animation
+  const drawFlippingPanel = (val, scaleY, originBottom) => {
+    ctx.save();
+    const pivotY = originBottom ? y + h / 2 : y + h / 2;
+    ctx.translate(x + w / 2, pivotY);
+    ctx.scale(1, originBottom ? -scaleY : scaleY);
+    ctx.translate(-(x + w / 2), -pivotY);
+
+    const py = originBottom ? y : y;
+    rr(x, py, w, h / 2, r, r, 0, 0);
+    ctx.fillStyle = glassFill;
+    ctx.fill();
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.save();
+    rr(x, py, w, h / 2, r, r, 0, 0);
+    ctx.clip();
+    ctx.fillStyle = "#fff";
+    ctx.font = `800 ${fs}px 'Outfit','DM Sans',Arial,sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
+    ctx.shadowBlur = 10;
+    ctx.fillText(val, x + w / 2, y + h * 0.5);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.restore();
+  };
+
+  // Get flip state for this card
+  const key = ampm !== undefined ? "h" : "m"; // hour card vs minute card
+  const { flipping, cur, next, t } = getFlipProgress(key, text, now);
+
+  if (!flipping) {
+    // Static: top half shows cur, bottom half shows cur
+    drawHalf(text, true);
+    drawHalf(text, false);
+  } else {
+    // Phase 1 (t < 0.5): top flips down from cur → reveals next bottom
+    // Phase 2 (t >= 0.5): bottom flips up from cur → shows next
+    const phase1 = t < 0.5;
+
+    // Bottom half always shows "next" once flip starts
+    drawHalf(next, false);
+    // Top half always shows "cur" static
+    drawHalf(cur, true);
+
+    if (phase1) {
+      // Fold the top half down: scaleY goes 1→0
+      const scaleY = 1 - easeIn(t * 2);
+      drawFlippingPanel(cur, scaleY, false);
+    } else {
+      // Unfold bottom half up: scaleY goes 0→1 (flipped)
+      const scaleY = easeOut((t - 0.5) * 2);
+      // Draw bottom half of "next" unfolding upward
+      ctx.save();
+      const pivotY = y + h / 2;
+      ctx.translate(x + w / 2, pivotY);
+      ctx.scale(1, scaleY);
+      ctx.translate(-(x + w / 2), -pivotY);
+      rr(x, y, w, h / 2, r, r, 0, 0);
+      ctx.fillStyle = glassFill;
+      ctx.fill();
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.save();
+      rr(x, y, w, h / 2, r, r, 0, 0);
+      ctx.clip();
+      ctx.fillStyle = "#fff";
+      ctx.font = `800 ${fs}px 'Outfit','DM Sans',Arial,sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(next, x + w / 2, y + h * 0.5);
+      ctx.restore();
+      ctx.restore();
+    }
+  }
 
   // Center seam
   ctx.fillStyle = "#000";
-  ctx.fillRect(x, y + h / 2 - 1.5, w, 3);
+  ctx.fillRect(x, y + h / 2 - 2, w, 4);
 
   // Screws
   const screwR = size * 0.03;
-  const screwY = y + h / 2;
   [x + w * 0.07, x + w * 0.93].forEach(sx => {
     ctx.beginPath();
-    ctx.arc(sx, screwY, screwR, 0, Math.PI * 2);
+    ctx.arc(sx, y + h / 2, screwR, 0, Math.PI * 2);
     ctx.fillStyle = "#2e2e2e";
     ctx.fill();
-    ctx.strokeStyle = "#444";
+    ctx.strokeStyle = "#555";
     ctx.lineWidth = 1.5;
     ctx.stroke();
   });
 
-  // Number — clipped to full card
-  ctx.save();
-  rr(x, y, w, h, r, r, r, r);
-  ctx.clip();
-  ctx.fillStyle = "#fff";
-  ctx.font = `800 ${fs}px 'Outfit','DM Sans',Arial,sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.shadowColor = "rgba(0,0,0,0.8)";
-  ctx.shadowBlur = 12;
-  ctx.fillText(text, x + w / 2, y + h / 2);
-  ctx.shadowBlur = 0;
-  ctx.restore();
-
-  // AM/PM inside bottom-left of card (hour card only)
+  // AM/PM inside bottom-left (hour card only)
   if (ampm) {
     ctx.fillStyle = "rgba(255,255,255,0.45)";
     ctx.font = `500 ${size * 0.12}px 'Outfit','DM Sans',Arial,sans-serif`;
@@ -129,7 +222,10 @@ function drawFlipCard(ctx, x, y, size, text, ampm) {
   }
 }
 
-function drawClock(ctx, w, h) {
+// Track previous values to detect changes and trigger flips
+let prevLeft = null, prevRight = null;
+
+function drawClock(ctx, w, h, now) {
   const { mode, time } = useStore.getState();
   let left, right, ampm;
   if (mode === "clock") {
@@ -146,17 +242,22 @@ function drawClock(ctx, w, h) {
     ampm  = null;
   }
 
-  // Square cards: size = min of available height or half width with gap
-  const gap     = w * 0.06;
-  const maxByH  = h * 0.72;
-  const maxByW  = (w - gap - w * 0.1) / 2;   // 5% padding each side
-  const size    = Math.min(maxByH, maxByW);
-  const totalW  = size * 2 + gap;
-  const startX  = (w - totalW) / 2;
-  const startY  = (h - size) / 2;
+  // Trigger flip animations when values change
+  if (prevLeft  !== null && prevLeft  !== left)  triggerFlip("h", prevLeft,  left,  now);
+  if (prevRight !== null && prevRight !== right)  triggerFlip("m", prevRight, right, now);
+  prevLeft  = left;
+  prevRight = right;
 
-  drawFlipCard(ctx, startX,          startY, size, left,  ampm);
-  drawFlipCard(ctx, startX + size + gap, startY, size, right, null);
+  // Square cards: size = min of available height or half width with gap
+  const gap    = w * 0.06;
+  const maxByH = h * 0.72;
+  const maxByW = (w - gap - w * 0.1) / 2;
+  const size   = Math.min(maxByH, maxByW);
+  const startX = (w - (size * 2 + gap)) / 2;
+  const startY = (h - size) / 2;
+
+  drawFlipCard(ctx, startX,              startY, size, left,  ampm, now);
+  drawFlipCard(ctx, startX + size + gap, startY, size, right, null, now);
 
   // Sub label for timer mode
   if (!ampm) {
@@ -199,12 +300,14 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
 
   const drawFrame = useCallback((now = 0) => {
     const canvas = getCanvas();
-    if (now && now - lastFrameRef.current < FRAME_MS) return;
+    // Only throttle when nothing is animating
+    const isAnimating = Object.keys(flipState).length > 0;
+    if (!isAnimating && now && now - lastFrameRef.current < FRAME_MS) return;
     lastFrameRef.current = now;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, PIP_W, PIP_H);
     drawBg(ctx, PIP_W, PIP_H);
-    drawClock(ctx, PIP_W, PIP_H);
+    drawClock(ctx, PIP_W, PIP_H, now);
     if (streamRef.current) {
       const track = streamRef.current.getVideoTracks()[0];
       if (track?.requestFrame) track.requestFrame();

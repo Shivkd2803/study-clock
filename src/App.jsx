@@ -299,16 +299,89 @@ function ScrollDrum({ value, max, onChange }) {
 function SetTimeSheet({ onClose }) {
   const [h, setH] = useState(0);
   const [m, setM] = useState(0);
+  const { w } = useWindowSize();
+  const isDesktop = w >= 1100;
+
+  // Desktop typed input state
+  const [hInput, setHInput] = useState("00");
+  const [mInput, setMInput] = useState("00");
+  const hRef = useRef(null);
+  const mRef = useRef(null);
 
   const go = () => {
-    const t = h * 3600 + m * 60;
+    let hours = h, mins = m;
+    if (isDesktop) {
+      hours = Math.min(23, Math.max(0, parseInt(hInput) || 0));
+      mins  = Math.min(59, Math.max(0, parseInt(mInput) || 0));
+    }
+    const t = hours * 3600 + mins * 60;
     if (!t) return;
     useStore.setState({ mode:"long", time:t, originalTime:t, running:false });
     onClose();
   };
 
-  const displayH = String(h).padStart(2,"0");
-  const displayM = String(m).padStart(2,"0");
+  const displayH = isDesktop ? hInput : String(h).padStart(2,"0");
+  const displayM = isDesktop ? mInput : String(m).padStart(2,"0");
+
+  // Desktop: clean number input UI
+  const DesktopInputs = () => (
+    <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+      {/* Hours */}
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+        <label className="text-white/40 text-xs tracking-widest uppercase">Hours</label>
+        <input
+          ref={hRef}
+          type="number"
+          min={0} max={23}
+          value={hInput}
+          onChange={e => {
+            const v = e.target.value.replace(/\D/g,"").slice(0,2);
+            setHInput(v);
+            if (v.length === 2) mRef.current?.focus();
+          }}
+          onFocus={e => e.target.select()}
+          onBlur={e => setHInput(String(Math.min(23, parseInt(e.target.value)||0)).padStart(2,"0"))}
+          onKeyDown={e => { if (e.key === "Enter") go(); }}
+          placeholder="00"
+          style={{
+            width:120, height:96, textAlign:"center", background:"rgba(240,237,232,0.08)",
+            border:"1px solid rgba(255,255,255,0.15)", borderRadius:18,
+            color:"#fff", fontSize:52, fontWeight:800,
+            fontFamily:"'Outfit','DM Sans',sans-serif", outline:"none",
+            caretColor:"#f0ede8", letterSpacing:"-0.02em",
+            WebkitAppearance:"none", MozAppearance:"textfield",
+          }}
+        />
+      </div>
+      <span className="text-white font-bold select-none" style={{fontSize:48, marginTop:24}}>:</span>
+      {/* Minutes */}
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+        <label className="text-white/40 text-xs tracking-widest uppercase">Minutes</label>
+        <input
+          ref={mRef}
+          type="number"
+          min={0} max={59}
+          value={mInput}
+          onChange={e => {
+            const v = e.target.value.replace(/\D/g,"").slice(0,2);
+            setMInput(v);
+          }}
+          onFocus={e => e.target.select()}
+          onBlur={e => setMInput(String(Math.min(59, parseInt(e.target.value)||0)).padStart(2,"0"))}
+          onKeyDown={e => { if (e.key === "Enter") go(); }}
+          placeholder="00"
+          style={{
+            width:120, height:96, textAlign:"center", background:"rgba(240,237,232,0.08)",
+            border:"1px solid rgba(255,255,255,0.15)", borderRadius:18,
+            color:"#fff", fontSize:52, fontWeight:800,
+            fontFamily:"'Outfit','DM Sans',sans-serif", outline:"none",
+            caretColor:"#f0ede8", letterSpacing:"-0.02em",
+            WebkitAppearance:"none", MozAppearance:"textfield",
+          }}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <motion.div className="fixed inset-0 z-[900] flex items-end justify-center bg-black/60 backdrop-blur-sm"
@@ -320,18 +393,20 @@ function SetTimeSheet({ onClose }) {
         <div className="w-10 h-1 bg-white/20 rounded-full"/>
         <h2 className="text-white text-2xl font-bold">Set Timer</h2>
 
-        {/* Scroll drums */}
-        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-            <label className="text-white/40 text-xs tracking-widest uppercase">Hours</label>
-            <ScrollDrum value={h} max={23} onChange={setH}/>
+        {/* Desktop: type inputs — Mobile: scroll drums */}
+        {isDesktop ? <DesktopInputs /> : (
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+              <label className="text-white/40 text-xs tracking-widest uppercase">Hours</label>
+              <ScrollDrum value={h} max={23} onChange={setH}/>
+            </div>
+            <span className="text-white text-5xl font-bold select-none" style={{marginTop:24}}>:</span>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+              <label className="text-white/40 text-xs tracking-widest uppercase">Minutes</label>
+              <ScrollDrum value={m} max={59} onChange={setM}/>
+            </div>
           </div>
-          <span className="text-white text-5xl font-bold select-none" style={{marginTop:24}}>:</span>
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-            <label className="text-white/40 text-xs tracking-widest uppercase">Minutes</label>
-            <ScrollDrum value={m} max={59} onChange={setM}/>
-          </div>
-        </div>
+        )}
 
         <p className="text-white/40 text-sm">
           Timer will be set to <span className="text-[#f0ede8] font-semibold">{displayH}:{displayM}</span>
@@ -460,23 +535,12 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
     onClose();
   };
 
-  // Detect iPhone specifically — evaluated once, UA doesn't change with orientation
-  // iPhone UA always contains "iPhone" regardless of landscape/portrait
+  // Detect iPhone specifically — iPhone blocks programmatic PiP via JS
   const isIPhone = (() => {
     try {
-      const ua = navigator.userAgent;
-      // Primary: iPhone UA string — most reliable, works in all orientations
-      if (/iPhone/.test(ua)) return true;
-      // Secondary: touch device with small max screen dimension (iPhone max ~430px logical)
-      // This catches edge cases where UA might be spoofed
-      const minScreen = Math.min(screen.width, screen.height);
-      if (
-        navigator.maxTouchPoints > 1 &&
-        !(/iPad/.test(ua)) &&
-        !(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) &&
-        minScreen <= 430
-      ) return true;
-      return false;
+      return /iPhone/.test(navigator.userAgent) &&
+        !(/iPad/.test(navigator.userAgent)) &&
+        navigator.maxTouchPoints > 1;
     } catch { return false; }
   })();
 
@@ -642,7 +706,7 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
               </svg>
             </button>
 
-            {/* PiP — iPad and Android/Desktop only. NEVER on iPhone (all orientations). */}
+            {/* PiP — iPad and Android/Desktop only. iPhone blocked by Apple. */}
             {!window.electron && !isIPhone && (
               isIPad ? (
                 <button
@@ -670,8 +734,8 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
               )
             )}
 
-            {/* Widget — Electron desktop only, never shown on web/iOS/Android/iPhone */}
-            {typeof window !== "undefined" && !!window.electron && !isIPhone && onEnterWidget && (
+            {/* Widget — Electron desktop only, never shown on web/iOS/Android */}
+            {typeof window !== "undefined" && !!window.electron && onEnterWidget && (
               <button
                 onClick={() => {
                   fsListenerRef.current = false;

@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld("electron", {
   getWidgetState: () => ipcRenderer.sendSync("get-widget-state"),
   // Live updates pushed from main process to widget
   onWidgetState:  (cb) => ipcRenderer.on("widget-state", (_, state) => cb(state)),
+  // Quit entire app (used by widget close button)
+  quit:           () => ipcRenderer.send("window-quit"),
 });
