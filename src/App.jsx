@@ -451,19 +451,56 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
   };
 
   const handlePiP = () => {
-    // enterPiP MUST be called synchronously inside the click handler
-    // prime() is called on mount — this is just a safety fallback for non-iOS
-    if (enterPiP) enterPiP();
+    const vid = bgVideoRef?.current;
+    if (vid && typeof vid.webkitSetPresentationMode === "function") {
+      vid.removeAttribute("playsinline");
+      vid.removeAttribute("webkit-playsinline");
+    }
+    if (enterPiP) enterPiP(bgVideoRef);
     onClose();
   };
 
-  // Safe runtime check — never runs at module load time
+  // Detect iPhone specifically — evaluated once, UA doesn't change with orientation
+  // iPhone UA always contains "iPhone" regardless of landscape/portrait
+  const isIPhone = (() => {
+    try {
+      const ua = navigator.userAgent;
+      // Primary: iPhone UA string — most reliable, works in all orientations
+      if (/iPhone/.test(ua)) return true;
+      // Secondary: touch device with small max screen dimension (iPhone max ~430px logical)
+      // This catches edge cases where UA might be spoofed
+      const minScreen = Math.min(screen.width, screen.height);
+      if (
+        navigator.maxTouchPoints > 1 &&
+        !(/iPad/.test(ua)) &&
+        !(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) &&
+        minScreen <= 430
+      ) return true;
+      return false;
+    } catch { return false; }
+  })();
+
+  const isIPad = (() => {
+    try {
+      return /iPad/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1 && !/iPhone/.test(navigator.userAgent));
+    } catch { return false; }
+  })();
+
+  // Safe runtime check
   const pipSupported = (() => {
     try {
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-      return !!document.pictureInPictureEnabled ||
-        (isIOS && !!HTMLVideoElement.prototype.webkitSetPresentationMode);
+      // Standard PiP (Chrome/Android/Desktop)
+      if (document.pictureInPictureEnabled) return true;
+      // iOS webkit PiP — check actual video element, not just prototype
+      const vid = bgVideoRef?.current ||
+        [...document.querySelectorAll("video")].find(v => v.readyState >= 2);
+      if (vid && typeof vid.webkitSetPresentationMode === "function" &&
+          vid.webkitSupportsPresentationMode?.("picture-in-picture")) return true;
+      // Fallback: check prototype exists (older iOS)
+      if (typeof HTMLVideoElement !== "undefined" &&
+          typeof HTMLVideoElement.prototype.webkitSetPresentationMode === "function") return true;
+      return false;
     } catch { return false; }
   })();
 
@@ -605,27 +642,39 @@ function FSPreview({ onClose, isDesktop = false, onEnterWidget, enterPiP, prime 
               </svg>
             </button>
 
-            {/* Picture-in-Picture button — web/mobile only, only if browser supports it */}
-            {enterPiP && pipSupported && (
-              <button
-                onClick={handlePiP}
-                title="Picture in Picture"
-                className="flex items-center justify-center text-white transition-all active:scale-90"
-                style={{ background:"rgba(0,0,0,0.35)", backdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:12, padding:10, filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.5))" }}>
-                {/* PiP icon: screen with small inset rectangle */}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="4" width="20" height="16" rx="2"/>
-                  <rect x="12" y="11" width="8" height="6" rx="1.5" fill="currentColor" stroke="none"/>
-                </svg>
-              </button>
+            {/* PiP — iPad and Android/Desktop only. NEVER on iPhone (all orientations). */}
+            {!window.electron && !isIPhone && (
+              isIPad ? (
+                <button
+                  onClick={handlePiP}
+                  title="Picture in Picture"
+                  className="flex items-center justify-center text-white transition-all active:scale-90"
+                  style={{ background:"rgba(0,0,0,0.35)", backdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:12, padding:10, filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.5))" }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <rect x="12" y="11" width="8" height="6" rx="1.5" fill="currentColor" stroke="none"/>
+                  </svg>
+                </button>
+              ) : (
+                /* Android / Desktop Chrome */
+                <button
+                  onClick={handlePiP}
+                  title="Picture in Picture"
+                  className="flex items-center justify-center text-white transition-all active:scale-90"
+                  style={{ background:"rgba(0,0,0,0.35)", backdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:12, padding:10, filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.5))" }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <rect x="12" y="11" width="8" height="6" rx="1.5" fill="currentColor" stroke="none"/>
+                  </svg>
+                </button>
+              )
             )}
 
-            {/* Widget Mode button — Electron desktop only */}
-            {onEnterWidget && window.electron && (
+            {/* Widget — Electron desktop only, never shown on web/iOS/Android/iPhone */}
+            {typeof window !== "undefined" && !!window.electron && !isIPhone && onEnterWidget && (
               <button
                 onClick={() => {
                   fsListenerRef.current = false;
-                  onClose();
                   onEnterWidget();
                 }}
                 title="Widget mode"
@@ -763,148 +812,9 @@ function FlipClock({ cardSize, isTimer, timerDisplay, clock, phonePortrait }) {
 
 
 // ─── THREE DOT MENU BUTTON ────────────────────────────────────────────────────
-function BgMenuBtn({ bg, size = 16 }) {
-  const [open, setOpen] = useState(false);
-  const [status, setStatus] = useState(() => isBackgroundCached(bg.name) ? "cached" : "idle");
-  const [progress, setProgress] = useState(0);
-  const menuRef = useRef(null);
-  const abortRef = useRef(null);
+// Download feature removed
+function BgMenuBtn({ bg, size = 16 }) { return null; }
 
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    document.addEventListener("touchstart", handler);
-    return () => { document.removeEventListener("mousedown", handler); document.removeEventListener("touchstart", handler); };
-  }, [open]);
-
-  const handleDownload = async (e) => {
-    e.stopPropagation();
-    setOpen(false);
-    setStatus("downloading");
-    setProgress(0);
-    abortRef.current = new AbortController();
-    try {
-      await cacheBackground(bg, ({ percent }) => setProgress(Math.round(percent * 100)), abortRef.current.signal);
-      setStatus("cached");
-    } catch (err) {
-      // Aborted or failed — clean up partial cache
-      await uncacheBackground(bg);
-      setStatus("idle");
-    }
-    abortRef.current = null;
-  };
-
-  const handleCancel = (e) => {
-    e.stopPropagation();
-    if (abortRef.current) abortRef.current.abort();
-    setStatus("idle");
-    setProgress(0);
-    setOpen(false);
-  };
-
-  const handleRemove = async (e) => {
-    e.stopPropagation();
-    setOpen(false);
-    await uncacheBackground(bg);
-    setStatus("idle");
-  };
-
-  return (
-    <div ref={menuRef} style={{ position:"absolute", top:6, right:6, zIndex:10 }} onClick={e => e.stopPropagation()}>
-      {/* Button */}
-      {status === "downloading" ? (
-        <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
-          style={{ width:26, height:26, borderRadius:"50%", border:"none", cursor:"pointer",
-            background:"rgba(0,0,0,0.65)", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
-          <svg width={22} height={22} viewBox="0 0 36 36" style={{position:"absolute"}}>
-            <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="3"/>
-            <circle cx="18" cy="18" r="15" fill="none" stroke="#f0ede8" strokeWidth="3"
-              strokeDasharray={`${progress * 0.942} 94.2`} strokeLinecap="round"
-              transform="rotate(-90 18 18)"/>
-          </svg>
-        </button>
-      ) : (
-        <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
-          style={{ width:26, height:26, borderRadius:"50%", border:"none", cursor:"pointer",
-            background:"rgba(0,0,0,0.55)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <svg width={14} height={14} viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)">
-            <circle cx="12" cy="5"  r="1.5"/>
-            <circle cx="12" cy="12" r="1.5"/>
-            <circle cx="12" cy="19" r="1.5"/>
-          </svg>
-        </button>
-      )}
-
-      {/* Dropdown */}
-      {open && (
-        <motion.div
-          initial={{ opacity:0, scale:0.9, y:-4 }}
-          animate={{ opacity:1, scale:1, y:0 }}
-          exit={{ opacity:0, scale:0.9 }}
-          transition={{ duration:0.12 }}
-          style={{
-            position:"absolute", top:30, right:0, zIndex:20,
-            background:"rgba(18,22,18,0.85)", backdropFilter:"blur(24px) saturate(180%)",
-            WebkitBackdropFilter:"blur(24px) saturate(180%)",
-            border:"1px solid rgba(255,255,255,0.12)", borderRadius:10,
-            minWidth:130, overflow:"hidden",
-            boxShadow:"0 8px 24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)",
-          }}>
-          {status === "downloading" ? (
-            // Show cancel option while downloading
-            <>
-              <div style={{ padding:"8px 14px 4px", fontSize:10, color:"rgba(255,255,255,0.35)", fontFamily:"'DM Sans',sans-serif", letterSpacing:"0.05em" }}>
-                {progress}% downloaded
-              </div>
-              <button onClick={handleCancel} style={{
-                width:"100%", padding:"9px 14px", border:"none", cursor:"pointer",
-                background:"transparent", color:"rgba(255,100,100,0.9)", fontSize:12,
-                fontFamily:"'DM Sans',sans-serif", textAlign:"left", display:"flex",
-                alignItems:"center", gap:7, fontWeight:600,
-              }}>
-                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-                </svg>
-                Cancel
-              </button>
-            </>
-          ) : status === "cached" ? (
-            <button onClick={handleRemove} style={{
-              width:"100%", padding:"9px 14px", border:"none", cursor:"pointer",
-              background:"transparent", color:"rgba(255,100,100,0.9)", fontSize:12,
-              fontFamily:"'DM Sans',sans-serif", textAlign:"left", display:"flex",
-              alignItems:"center", gap:7, fontWeight:600,
-            }}>
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/>
-              </svg>
-              Remove
-            </button>
-          ) : (
-            <button onClick={handleDownload} style={{
-              width:"100%", padding:"9px 14px", border:"none", cursor:"pointer",
-              background:"rgba(240,237,232,0.12)",
-              backdropFilter:"blur(16px)", WebkitBackdropFilter:"blur(16px)",
-              borderTop:"1px solid rgba(240,237,232,0.15)",
-              color:"#f0ede8", fontSize:12,
-              fontFamily:"'DM Sans',sans-serif", textAlign:"left", display:"flex",
-              alignItems:"center", gap:7, fontWeight:600, letterSpacing:"0.02em",
-            }}>
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              Download
-            </button>
-          )}
-        </motion.div>
-      )}
-    </div>
-  );
-}
 
 function AmbienceGrid({ cardH=100, count=6 }) {
   const backgrounds = useStore((s) => s.backgrounds);
@@ -1020,8 +930,10 @@ function ExploreModal({ onClose, desktop=false }) {
   if (desktop) {
     return (
       <motion.div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-        initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+        initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+        onClick={onClose}>
         <motion.div initial={{scale:0.92,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.92,opacity:0}} transition={{duration:0.25}}
+          onClick={e => e.stopPropagation()}
           className="w-[85vw] max-w-[1100px] max-h-[88vh] rounded-[36px] border border-white/15 flex flex-col overflow-hidden"
           style={{background:"rgba(255,255,255,0.07)", backdropFilter:"blur(40px) saturate(160%)", WebkitBackdropFilter:"blur(40px) saturate(160%)", boxShadow:"0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12)"}}>
           <div className="flex items-start justify-between px-10 pt-9 pb-5 flex-shrink-0">

@@ -1,15 +1,10 @@
 // ─── Picture-in-Picture Widget ────────────────────────────────────────────────
 //
-// Platform strategy:
-//   iOS Safari (14+) → Dedicated hidden <video> fed by MediaStream with silent
-//                       AudioContext track (required for iOS PiP eligibility) +
-//                       canvas clock frames via requestVideoFrameCallback shim.
-//                       Uses webkitSetPresentationMode('picture-in-picture').
+// iOS Safari  → webkitSetPresentationMode on the ACTUAL bg <video> in FSPreview
+//               → shows the real background video in PiP (with clock overlay impossible,
+//                 but the video plays — best iOS can do without captureStream)
 //
-//   Android / Desktop Chrome → canvas.captureStream(0) → hidden <video> →
-//                               requestPictureInPicture()
-//
-//   No support → pipSupported = false, button hidden
+// Android / Desktop Chrome → canvas.captureStream() clock overlay → requestPictureInPicture()
 
 import { useEffect, useRef, useCallback } from "react";
 import { useStore } from "../store/useStore";
@@ -18,7 +13,7 @@ const PIP_W = 480;
 const PIP_H = 270;
 const FRAME_MS = 1000 / 30;
 
-// ─── Runtime capability detection (always safe — never top-level) ─────────────
+// ─── Runtime capability detection ────────────────────────────────────────────
 function getCaps() {
   try {
     const isIOS =
@@ -34,7 +29,7 @@ function getCaps() {
   }
 }
 
-// ─── Canvas helpers ───────────────────────────────────────────────────────────
+// ─── Canvas helpers (standard PiP only) ──────────────────────────────────────
 function fmtTime(secs) {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
@@ -56,106 +51,136 @@ function drawBg(ctx, w, h) {
   ctx.fillRect(0, 0, w, h);
 }
 
+function drawFlipCard(ctx, x, y, size, text, ampm) {
+  const w = size, h = size;
+  const r = size * 0.08;
+  const fs = size * 0.52;
+  const glass = "rgba(30,30,30,0.55)";
+  const border = "rgba(255,255,255,0.08)";
+
+  // Helper: rounded rect path
+  const rr = (cx, cy, cw, ch, tl, tr, bl, br) => {
+    ctx.beginPath();
+    ctx.moveTo(cx + tl, cy);
+    ctx.lineTo(cx + cw - tr, cy);
+    ctx.quadraticCurveTo(cx + cw, cy, cx + cw, cy + tr);
+    ctx.lineTo(cx + cw, cy + ch - br);
+    ctx.quadraticCurveTo(cx + cw, cy + ch, cx + cw - br, cy + ch);
+    ctx.lineTo(cx + bl, cy + ch);
+    ctx.quadraticCurveTo(cx, cy + ch, cx, cy + ch - bl);
+    ctx.lineTo(cx, cy + tl);
+    ctx.quadraticCurveTo(cx, cy, cx + tl, cy);
+    ctx.closePath();
+  };
+
+  // Top half panel
+  rr(x, y, w, h / 2, r, r, 0, 0);
+  ctx.fillStyle = glass;
+  ctx.fill();
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Bottom half panel
+  rr(x, y + h / 2, w, h / 2, 0, 0, r, r);
+  ctx.fillStyle = glass;
+  ctx.fill();
+  ctx.strokeStyle = border;
+  ctx.stroke();
+
+  // Center seam
+  ctx.fillStyle = "#000";
+  ctx.fillRect(x, y + h / 2 - 1.5, w, 3);
+
+  // Screws
+  const screwR = size * 0.03;
+  const screwY = y + h / 2;
+  [x + w * 0.07, x + w * 0.93].forEach(sx => {
+    ctx.beginPath();
+    ctx.arc(sx, screwY, screwR, 0, Math.PI * 2);
+    ctx.fillStyle = "#2e2e2e";
+    ctx.fill();
+    ctx.strokeStyle = "#444";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  // Number — clipped to full card
+  ctx.save();
+  rr(x, y, w, h, r, r, r, r);
+  ctx.clip();
+  ctx.fillStyle = "#fff";
+  ctx.font = `800 ${fs}px 'Outfit','DM Sans',Arial,sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(0,0,0,0.8)";
+  ctx.shadowBlur = 12;
+  ctx.fillText(text, x + w / 2, y + h / 2);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // AM/PM inside bottom-left of card (hour card only)
+  if (ampm) {
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = `500 ${size * 0.12}px 'Outfit','DM Sans',Arial,sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(ampm, x + size * 0.09, y + h - size * 0.07);
+  }
+}
+
 function drawClock(ctx, w, h) {
   const { mode, time } = useStore.getState();
-  let text, sub;
+  let left, right, ampm;
   if (mode === "clock") {
     const t = new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", hour12:true });
     const parts = t.split(" ");
-    text = parts[0] || "12:00";
-    sub  = parts[1] || "AM";
+    const [hh, mm] = (parts[0] || "12:00").split(":");
+    left  = (hh || "12").padStart(2, "0");
+    right = (mm || "00").padStart(2, "0");
+    ampm  = parts[1] || "AM";
   } else {
-    text = fmtTime(time);
-    sub  = mode === "short" ? "SHORT BREAK" : "TIMER";
+    const fmt = fmtTime(time).split(":");
+    left  = fmt[0];
+    right = fmt[1];
+    ampm  = null;
   }
-  ctx.fillStyle = "#fff";
-  ctx.font = `bold ${h * 0.46}px 'DM Sans',Arial,sans-serif`;
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.shadowColor = "rgba(0,0,0,0.9)"; ctx.shadowBlur = 18;
-  ctx.fillText(text, w / 2, h * 0.44);
-  ctx.shadowBlur = 0;
-  if (sub) {
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
-    ctx.font = `300 ${h * 0.11}px 'DM Sans',Arial,sans-serif`;
-    ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 8;
-    ctx.fillText(sub, w / 2, h * 0.76);
-    ctx.shadowBlur = 0;
+
+  // Square cards: size = min of available height or half width with gap
+  const gap     = w * 0.06;
+  const maxByH  = h * 0.72;
+  const maxByW  = (w - gap - w * 0.1) / 2;   // 5% padding each side
+  const size    = Math.min(maxByH, maxByW);
+  const totalW  = size * 2 + gap;
+  const startX  = (w - totalW) / 2;
+  const startY  = (h - size) / 2;
+
+  drawFlipCard(ctx, startX,          startY, size, left,  ampm);
+  drawFlipCard(ctx, startX + size + gap, startY, size, right, null);
+
+  // Sub label for timer mode
+  if (!ampm) {
+    const sub = mode === "short" ? "SHORT BREAK" : "TIMER";
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = `300 ${h * 0.08}px 'DM Sans',Arial,sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(sub, w / 2, startY + size + h * 0.04);
   }
-}
-
-// ─── Create a MediaStream video element eligible for iOS PiP ─────────────────
-// iOS requires a video with an audio track to be PiP-eligible.
-// We create a silent AudioContext oscillator at 0 gain as the audio track.
-function createIOSPiPVideo(canvas) {
-  return new Promise((resolve, reject) => {
-    try {
-      // 1. Silent audio track via AudioContext
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const audioCtx = new AudioCtx();
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-      gainNode.gain.value = 0; // completely silent
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      oscillator.start();
-      const audioStream = audioCtx.createMediaStreamDestination();
-      gainNode.connect(audioStream);
-
-      // 2. Canvas video track
-      // iOS Safari does NOT support captureStream — so we use a MediaStream
-      // built from a canvas ImageBitmap approach via requestAnimationFrame + srcObject trick.
-      // Instead, we use a plain canvas.captureStream if available, else fall back.
-      let videoStream;
-      if (typeof canvas.captureStream === "function") {
-        videoStream = canvas.captureStream(30);
-      } else {
-        // iOS doesn't have captureStream — use empty video track workaround
-        videoStream = new MediaStream();
-      }
-
-      // 3. Combine audio + video into one stream
-      const combined = new MediaStream([
-        ...videoStream.getVideoTracks(),
-        ...audioStream.stream.getAudioTracks(),
-      ]);
-
-      // 4. Hidden video element
-      const v = document.createElement("video");
-      v.srcObject = combined;
-      // Do NOT set muted at element level — iOS checks this for PiP eligibility
-      // We silence via gainNode instead
-      v.volume = 0;
-      v.setAttribute("playsinline", "");
-      v.setAttribute("webkit-playsinline", "");
-      v.style.cssText =
-        "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;z-index:-1;pointer-events:none;";
-      document.body.appendChild(v);
-
-      v.play()
-        .then(() => resolve({ video: v, audioCtx, oscillator }))
-        .catch(reject);
-    } catch (e) {
-      reject(e);
-    }
-  });
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
+// bgVideoRef: pass FSPreview's <video> ref to enterPiP for iOS
 export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
-  const canvasRef       = useRef(null);
-  const pipVideoRef     = useRef(null);   // hidden video for standard PiP
-  const iosPiPRef       = useRef(null);   // { video, audioCtx, oscillator } for iOS
-  const hiddenBgRef     = useRef(null);   // hidden bg video for canvas drawing
-  const streamRef       = useRef(null);
-  const rafRef          = useRef(null);
-  const lastFrameRef    = useRef(0);
-  const styleRef        = useRef(clockStyle);
-  const activeRef       = useRef(false);
-  const readyRef        = useRef(false);
-  const primingRef      = useRef(false);
-  const bgUrlRef        = useRef(null);
-  const iosReadyRef     = useRef(false);
-  const iosPrimingRef   = useRef(false);
+  const canvasRef    = useRef(null);
+  const pipVideoRef  = useRef(null);
+  const streamRef    = useRef(null);
+  const rafRef       = useRef(null);
+  const lastFrameRef = useRef(0);
+  const styleRef     = useRef(clockStyle);
+  const activeRef    = useRef(false);
+  const readyRef     = useRef(false);
+  const primingRef   = useRef(false);
 
   const onEnterRef = useRef(onEnter);
   const onLeaveRef = useRef(onLeave);
@@ -163,7 +188,6 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
   useEffect(() => { onLeaveRef.current = onLeave; }, [onLeave]);
   useEffect(() => { styleRef.current = clockStyle; }, [clockStyle]);
 
-  // ── Shared canvas ─────────────────────────────────────────────────────────
   const getCanvas = useCallback(() => {
     if (!canvasRef.current) {
       const c = document.createElement("canvas");
@@ -173,43 +197,6 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
     return canvasRef.current;
   }, []);
 
-  // ── Hidden bg video for canvas compositing ────────────────────────────────
-  // NOTE: Cross-origin Cloudinary videos taint the canvas and break captureStream.
-  // We draw a solid dark background instead — clock is what matters in PiP.
-  // bg video sync is kept only for iOS path where we don't use captureStream.
-  const syncBgVideo = useCallback((url) => {
-    if (url === bgUrlRef.current) return;
-    bgUrlRef.current = url;
-    if (hiddenBgRef.current) {
-      hiddenBgRef.current.pause();
-      hiddenBgRef.current.remove();
-      hiddenBgRef.current = null;
-    }
-    if (!url) return;
-    const v = document.createElement("video");
-    v.muted = true; v.loop = true; v.autoplay = true; v.preload = "auto";
-    v.crossOrigin = "anonymous"; // required — without this canvas is always tainted
-    v.setAttribute("playsinline", "");
-    v.disableRemotePlayback = true;
-    v.style.cssText =
-      "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;z-index:-1;pointer-events:none;";
-    v.src = url;
-    document.body.appendChild(v);
-    hiddenBgRef.current = v;
-    v.play().catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const getUrl = () => {
-      const { currentBackground, backgrounds } = useStore.getState();
-      return backgrounds[currentBackground]?.video ?? null;
-    };
-    syncBgVideo(getUrl());
-    const unsub = useStore.subscribe(() => syncBgVideo(getUrl()));
-    return unsub;
-  }, [syncBgVideo]);
-
-  // ── Draw frame onto canvas ────────────────────────────────────────────────
   const drawFrame = useCallback((now = 0) => {
     const canvas = getCanvas();
     if (now && now - lastFrameRef.current < FRAME_MS) return;
@@ -218,7 +205,6 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
     ctx.clearRect(0, 0, PIP_W, PIP_H);
     drawBg(ctx, PIP_W, PIP_H);
     drawClock(ctx, PIP_W, PIP_H);
-    // Notify 0-fps captureStream of new frame
     if (streamRef.current) {
       const track = streamRef.current.getVideoTracks()[0];
       if (track?.requestFrame) track.requestFrame();
@@ -238,107 +224,14 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
   }, []);
 
-  // ── prime() — call on FSPreview mount (inside user gesture context) ───────
+  // ── prime() — standard PiP only, call on FSPreview mount ─────────────────
   const prime = useCallback(async () => {
     const { webkitPiP, standardPiP } = getCaps();
-
-    // ── iOS: create the PiP-eligible video ──────────────────────────────────
-    if (webkitPiP && !iosReadyRef.current && !iosPrimingRef.current) {
-      iosPrimingRef.current = true;
-      try {
-        drawFrame(); // draw first frame onto canvas
-        const canvas = getCanvas();
-        const result = await createIOSPiPVideo(canvas);
-        iosPiPRef.current = result;
-        iosReadyRef.current = true;
-      } catch (e) {
-        console.warn("[PiP iOS] prime failed:", e);
-      } finally {
-        iosPrimingRef.current = false;
-      }
-      return;
-    }
-
-    // ── Standard PiP (Android / Desktop) ────────────────────────────────────
+    if (webkitPiP) return; // iOS uses direct video PiP — no priming needed
     if (!standardPiP || readyRef.current || primingRef.current) return;
     primingRef.current = true;
-    const canvas = getCanvas();
-
-    const pv = (() => {
-      if (pipVideoRef.current) return pipVideoRef.current;
-      const v = document.createElement("video");
-      v.muted = true; v.loop = true; v.autoplay = true;
-      v.setAttribute("playsinline", "");
-      v.disableRemotePlayback = true;
-      v.style.cssText =
-        "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;z-index:-1;";
-      document.body.appendChild(v);
-      pipVideoRef.current = v;
-      return v;
-    })();
-
-    drawFrame();
-    try {
-      if (!streamRef.current) streamRef.current = canvas.captureStream(0);
-      if (pv.srcObject !== streamRef.current) pv.srcObject = streamRef.current;
-      if (pv.paused) await pv.play();
-      readyRef.current = true;
-    } catch (e) {
-      if (e?.name !== "AbortError") console.warn("[PiP] prime failed:", e);
-      setTimeout(async () => {
-        try { if (!readyRef.current && pipVideoRef.current) { await pipVideoRef.current.play(); readyRef.current = true; } } catch {}
-      }, 150);
-    } finally {
-      primingRef.current = false;
-    }
-  }, [drawFrame, getCanvas]);
-
-  // ── enterPiP — MUST be called synchronously in a click handler ────────────
-  const enterPiP = useCallback(() => {
-    const { webkitPiP, standardPiP } = getCaps();
-
-    // ── iOS webkit PiP ────────────────────────────────────────────────────────
-    if (webkitPiP) {
-      const pip = iosPiPRef.current;
-      if (!pip || !iosReadyRef.current) {
-        console.warn("[PiP iOS] Not primed. Call prime() on FSPreview mount.");
-        return Promise.resolve(false);
-      }
-      const vid = pip.video;
-      try {
-        if (typeof vid.webkitSetPresentationMode !== "function") {
-          console.warn("[PiP iOS] webkitSetPresentationMode not available");
-          return Promise.resolve(false);
-        }
-        // Start canvas loop so clock animates in PiP
-        activeRef.current = true;
-        startLoop();
-        vid.webkitSetPresentationMode("picture-in-picture");
-        onEnterRef.current?.();
-        const onModeChange = () => {
-          if (vid.webkitPresentationMode !== "picture-in-picture") {
-            activeRef.current = false;
-            stopLoop();
-            onLeaveRef.current?.();
-            vid.removeEventListener("webkitpresentationmodechanged", onModeChange);
-          }
-        };
-        vid.addEventListener("webkitpresentationmodechanged", onModeChange);
-        return Promise.resolve(true);
-      } catch (e) {
-        activeRef.current = false;
-        stopLoop();
-        console.warn("[PiP iOS] webkitSetPresentationMode failed:", e);
-        return Promise.resolve(false);
-      }
-    }
-
-    // ── Standard PiP (Android Chrome / Desktop) ───────────────────────────────
-    if (!standardPiP) return Promise.resolve(false);
 
     const canvas = getCanvas();
-
-    // Ensure pipVideo exists
     if (!pipVideoRef.current) {
       const v = document.createElement("video");
       v.muted = true; v.loop = true; v.autoplay = true;
@@ -350,15 +243,98 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
       pipVideoRef.current = v;
     }
 
-    // Ensure stream exists
-    if (!streamRef.current) {
-      streamRef.current = canvas.captureStream(0);
+    drawFrame();
+    try {
+      if (!streamRef.current) streamRef.current = canvas.captureStream(0);
+      const pv = pipVideoRef.current;
+      if (pv.srcObject !== streamRef.current) pv.srcObject = streamRef.current;
+      if (pv.paused) await pv.play();
+      readyRef.current = true;
+    } catch (e) {
+      if (e?.name !== "AbortError") console.warn("[PiP] prime failed:", e);
+      setTimeout(async () => {
+        try {
+          if (!readyRef.current && pipVideoRef.current) {
+            await pipVideoRef.current.play();
+            readyRef.current = true;
+          }
+        } catch {}
+      }, 150);
+    } finally {
+      primingRef.current = false;
+    }
+  }, [drawFrame, getCanvas]);
+
+  // ── enterPiP — MUST be called synchronously in click handler ─────────────
+  // bgVideoRef: FSPreview's actual <video> element ref — used for iOS
+  const enterPiP = useCallback((bgVideoRef) => {
+    const { webkitPiP, standardPiP } = getCaps();
+
+    // ── iOS: use the actual playing background video directly ─────────────────
+    if (webkitPiP) {
+      // Find a video that actually supports PiP — check the instance, not the prototype
+      const candidates = bgVideoRef?.current
+        ? [bgVideoRef.current, ...document.querySelectorAll("video")]
+        : [...document.querySelectorAll("video")];
+
+      const vid = candidates.find(v =>
+        v &&
+        typeof v.webkitSetPresentationMode === "function" &&
+        v.webkitSupportsPresentationMode &&
+        v.webkitSupportsPresentationMode("picture-in-picture") &&
+        !v.paused &&
+        v.readyState >= 2
+      );
+
+      if (!vid) {
+        console.warn("[PiP iOS] No video element supports PiP right now");
+        return Promise.resolve(false);
+      }
+
+      try {
+        // iOS requires video NOT be muted at the element level for PiP
+        // We set volume=0 instead so it's silent but still eligible
+        vid.muted = false;
+        vid.volume = 0;
+
+        vid.webkitSetPresentationMode("picture-in-picture");
+        onEnterRef.current?.();
+
+        const onModeChange = () => {
+          if (vid.webkitPresentationMode !== "picture-in-picture") {
+            // Restore muted and playsinline after leaving PiP
+            vid.muted = true;
+            vid.setAttribute("playsinline", "");
+            onLeaveRef.current?.();
+            vid.removeEventListener("webkitpresentationmodechanged", onModeChange);
+          }
+        };
+        vid.addEventListener("webkitpresentationmodechanged", onModeChange);
+        return Promise.resolve(true);
+      } catch (e) {
+        console.warn("[PiP iOS] webkitSetPresentationMode failed:", e);
+        return Promise.resolve(false);
+      }
     }
 
+    // ── Standard PiP: Android Chrome / Desktop ────────────────────────────────
+    if (!standardPiP) return Promise.resolve(false);
+
+    const canvas = getCanvas();
+    if (!pipVideoRef.current) {
+      const v = document.createElement("video");
+      v.muted = true; v.loop = true; v.autoplay = true;
+      v.setAttribute("playsinline", "");
+      v.disableRemotePlayback = true;
+      v.style.cssText =
+        "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;z-index:-1;";
+      document.body.appendChild(v);
+      pipVideoRef.current = v;
+    }
+    if (!streamRef.current) streamRef.current = canvas.captureStream(0);
     const pv = pipVideoRef.current;
     if (pv.srcObject !== streamRef.current) pv.srcObject = streamRef.current;
-
-    drawFrame(); // draw a frame immediately so video isn't blank
+    drawFrame();
 
     const doEnter = () =>
       pv.requestPictureInPicture()
@@ -373,24 +349,26 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
           }, { once: true });
           return true;
         })
-        .catch((e) => { console.warn("[PiP] requestPictureInPicture failed:", e); return false; });
+        .catch(e => { console.warn("[PiP] requestPictureInPicture failed:", e); return false; });
 
-    if (!pv.paused) {
-      return doEnter();
-    }
-    // Not playing yet — play first then enter (still within gesture on most browsers)
-    return pv.play()
-      .then(() => { readyRef.current = true; return doEnter(); })
-      .catch((e) => { console.warn("[PiP] play failed:", e); return false; });
-  }, [startLoop, stopLoop, getCanvas, drawFrame]);
+    if (!pv.paused) return doEnter();
+    return pv.play().then(() => { readyRef.current = true; return doEnter(); })
+      .catch(e => { console.warn("[PiP] play failed:", e); return false; });
+
+  }, [getCanvas, drawFrame, startLoop, stopLoop]);
 
   // ── exitPiP ───────────────────────────────────────────────────────────────
   const exitPiP = useCallback(async () => {
     const { webkitPiP } = getCaps();
     activeRef.current = false;
     stopLoop();
-    if (webkitPiP && iosPiPRef.current?.video) {
-      try { iosPiPRef.current.video.webkitSetPresentationMode("inline"); } catch {}
+    if (webkitPiP) {
+      document.querySelectorAll("video").forEach(v => {
+        try {
+          if (v.webkitPresentationMode === "picture-in-picture")
+            v.webkitSetPresentationMode("inline");
+        } catch {}
+      });
       return;
     }
     if (document.pictureInPictureElement) {
@@ -398,21 +376,14 @@ export function usePiPWidget({ clockStyle = 0, onEnter, onLeave } = {}) {
     }
   }, [stopLoop]);
 
-  // ── Cleanup on unmount ────────────────────────────────────────────────────
+  // ── Cleanup ───────────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
       exitPiP();
-      readyRef.current = false; iosReadyRef.current = false;
-      primingRef.current = false; iosPrimingRef.current = false;
-      bgUrlRef.current = null; streamRef.current = null;
-      if (hiddenBgRef.current)  { hiddenBgRef.current.pause();  hiddenBgRef.current.remove();  hiddenBgRef.current  = null; }
-      if (pipVideoRef.current)  { pipVideoRef.current.remove(); pipVideoRef.current = null; }
-      if (iosPiPRef.current) {
-        try { iosPiPRef.current.oscillator.stop(); } catch {}
-        try { iosPiPRef.current.audioCtx.close(); } catch {}
-        try { iosPiPRef.current.video.remove(); } catch {}
-        iosPiPRef.current = null;
-      }
+      readyRef.current = false;
+      primingRef.current = false;
+      streamRef.current = null;
+      if (pipVideoRef.current) { pipVideoRef.current.remove(); pipVideoRef.current = null; }
     };
   }, []);
 

@@ -24,43 +24,59 @@ function fmtTime(secs) {
   return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-// ─── Flip Card ────────────────────────────────────────────────────────────────
-function FlipCard({ value, size }) {
+// ─── Flip Card — square, matches fullscreen FlipCard exactly ─────────────────
+function FlipCard({ value, size, ampm }) {
   const [cur, setCur] = useState(value);
   const [nxt, setNxt] = useState(value);
   const [flip, setFlip] = useState(false);
   useEffect(() => {
     if (value === cur) return;
     setNxt(value); setFlip(true);
-    const t = setTimeout(() => { setCur(value); setFlip(false); }, 380);
+    const t = setTimeout(() => { setCur(value); setFlip(false); }, 420);
     return () => clearTimeout(t);
   }, [value]);
-  const w = size * 1.55, h = size, r = size * 0.1, fs = size * 0.52;
-  const ns = { fontSize:fs, fontWeight:800, color:"#fff", lineHeight:1, fontFamily:"'DM Sans',sans-serif", letterSpacing:"-0.02em" };
-  const glass = { backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", background:"rgba(20,20,20,0.7)", border:"1px solid rgba(255,255,255,0.1)" };
+  const w = size, h = size, r = size * 0.08, fs = size * 0.52;
+  const ns = { fontSize:fs, fontWeight:800, color:"#fff", lineHeight:1,
+    fontFamily:"'Outfit','DM Sans',sans-serif", userSelect:"none", letterSpacing:"-0.02em" };
+  const glassBg = "rgba(30,30,30,0.55)";
+  const glassStyle = { backdropFilter:"blur(24px) saturate(160%)", WebkitBackdropFilter:"blur(24px) saturate(160%)",
+    border:"1px solid rgba(255,255,255,0.08)" };
   return (
-    <div style={{ width:w, height:h, position:"relative" }}>
-      <div style={{ position:"absolute", top:0, left:0, width:w, height:h/2, ...glass, borderRadius:`${r}px ${r}px 0 0`, overflow:"hidden", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+    <div style={{ width:w, height:h, position:"relative", perspective:800 }}>
+      <div style={{ position:"absolute", top:0, left:0, width:w, height:h/2, ...glassStyle, background:glassBg,
+        borderRadius:`${r}px ${r}px 0 0`, overflow:"hidden", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
         <span style={{...ns, transform:"translateY(50%)"}}>{cur}</span>
       </div>
-      <div style={{ position:"absolute", bottom:0, left:0, width:w, height:h/2, ...glass, borderRadius:`0 0 ${r}px ${r}px`, overflow:"hidden", display:"flex", alignItems:"flex-start", justifyContent:"center" }}>
+      <div style={{ position:"absolute", bottom:0, left:0, width:w, height:h/2, ...glassStyle, background:glassBg,
+        borderRadius:`0 0 ${r}px ${r}px`, overflow:"hidden", display:"flex", alignItems:"flex-start", justifyContent:"center" }}>
         <span style={{...ns, transform:"translateY(-50%)"}}>{nxt}</span>
       </div>
       {flip && (
-        <motion.div initial={{rotateX:0}} animate={{rotateX:-90}} transition={{duration:0.19, ease:"easeIn"}}
-          style={{ position:"absolute", top:0, left:0, width:w, height:h/2, ...glass, borderRadius:`${r}px ${r}px 0 0`, overflow:"hidden", transformOrigin:"50% 100%", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:3 }}>
+        <motion.div initial={{rotateX:0}} animate={{rotateX:-90}} transition={{duration:0.21, ease:"easeIn"}}
+          style={{ position:"absolute", top:0, left:0, width:w, height:h/2, ...glassStyle, background:glassBg,
+            borderRadius:`${r}px ${r}px 0 0`, overflow:"hidden", transformOrigin:"50% 100%",
+            display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:3 }}>
           <span style={{...ns, transform:"translateY(50%)"}}>{cur}</span>
         </motion.div>
       )}
       {flip && (
-        <motion.div initial={{rotateX:90}} animate={{rotateX:0}} transition={{duration:0.19, ease:"easeOut", delay:0.19}}
-          style={{ position:"absolute", bottom:0, left:0, width:w, height:h/2, ...glass, borderRadius:`0 0 ${r}px ${r}px`, overflow:"hidden", transformOrigin:"50% 0%", display:"flex", alignItems:"flex-start", justifyContent:"center", zIndex:3 }}>
+        <motion.div initial={{rotateX:90}} animate={{rotateX:0}} transition={{duration:0.21, ease:"easeOut", delay:0.21}}
+          style={{ position:"absolute", bottom:0, left:0, width:w, height:h/2, ...glassStyle, background:glassBg,
+            borderRadius:`0 0 ${r}px ${r}px`, overflow:"hidden", transformOrigin:"50% 0%",
+            display:"flex", alignItems:"flex-start", justifyContent:"center", zIndex:3 }}>
           <span style={{...ns, transform:"translateY(-50%)"}}>{nxt}</span>
         </motion.div>
       )}
-      <div style={{ position:"absolute", top:"50%", left:0, right:0, height:2, background:"#000", zIndex:4, transform:"translateY(-50%)" }}/>
-      <div style={{ position:"absolute", top:"50%", left:w*0.07, transform:"translateY(-50%)", zIndex:5, width:size*0.06, height:size*0.06, borderRadius:"50%", background:"#2a2a2a", border:"1px solid #444" }}/>
-      <div style={{ position:"absolute", top:"50%", right:w*0.07, transform:"translateY(-50%)", zIndex:5, width:size*0.06, height:size*0.06, borderRadius:"50%", background:"#2a2a2a", border:"1px solid #444" }}/>
+      <div style={{ position:"absolute", top:"50%", left:0, right:0, height:3, background:"#000", zIndex:4, transform:"translateY(-50%)" }}/>
+      <div style={{ position:"absolute", top:"50%", left:w*0.07, transform:"translateY(-50%)", zIndex:5,
+        width:w*0.06, height:w*0.06, borderRadius:"50%", background:"#2e2e2e", border:"1.5px solid #444" }}/>
+      <div style={{ position:"absolute", top:"50%", right:w*0.07, transform:"translateY(-50%)", zIndex:5,
+        width:w*0.06, height:w*0.06, borderRadius:"50%", background:"#2e2e2e", border:"1.5px solid #444" }}/>
+      {ampm && (
+        <span style={{ position:"absolute", bottom:w*0.07, left:w*0.09, zIndex:6,
+          fontSize:w*0.12, fontWeight:500, color:"rgba(255,255,255,0.45)",
+          fontFamily:"'Outfit',sans-serif", letterSpacing:"0.08em" }}>{ampm}</span>
+      )}
     </div>
   );
 }
@@ -71,11 +87,7 @@ export default function WidgetApp() {
   const time  = useStore(s => s.time);
   const clock = useLiveClock();
 
-  const [style, setStyle] = useState(() => {
-    try { return parseInt(localStorage.getItem("lsc_last_clock_style")) || 0; } catch { return 0; }
-  });
-
-  // Get video URL synchronously from main process on load — no timing issues
+  const isTimer  = mode !== "clock";
   const [videoUrl, setVideoUrl] = useState(() => {
     try {
       const state = window.electron?.getWidgetState?.();
@@ -110,44 +122,25 @@ export default function WidgetApp() {
     window.addEventListener("mouseup", onUp);
   };
 
-  // Swipe to switch clock style
-  const touchX = useRef(null);
-  const onTouchStart = e => { touchX.current = e.touches[0].clientX; };
-  const onTouchEnd   = e => {
-    if (touchX.current === null) return;
-    const dx = touchX.current - e.changedTouches[0].clientX;
-    if (Math.abs(dx) > 40) {
-      const ns = style === 0 ? 1 : 0;
-      setStyle(ns);
-      try { localStorage.setItem("lsc_last_clock_style", String(ns)); } catch {}
-    }
-    touchX.current = null;
-  };
-
-  const isTimer  = mode !== "clock";
   const timerStr = fmtTime(time);
-  const cardSize = 56;
+  const cardSize = 60;
 
   const renderClock = () => {
     const hStr = clock.h.padStart(2, "0");
     const mStr = clock.m.padStart(2, "0");
-    if (style === 1) {
-      return (
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <FlipCard value={isTimer ? timerStr.split(":")[0] : hStr} size={cardSize}/>
-          <FlipCard value={isTimer ? timerStr.split(":")[1] : mStr} size={cardSize}/>
-          {!isTimer && <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)", fontFamily:"'DM Sans',sans-serif", marginLeft:4 }}>{clock.ampm}</span>}
-        </div>
-      );
-    }
+    const left  = isTimer ? timerStr.split(":")[0] : hStr;
+    const right = isTimer ? timerStr.split(":")[1] : mStr;
     return (
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
-        <span style={{ fontSize:52, fontWeight:800, color:"#fff", fontFamily:"'DM Sans',sans-serif", lineHeight:1, textShadow:"0 2px 20px rgba(0,0,0,0.8)", letterSpacing:"-0.02em" }}>
-          {isTimer ? timerStr : `${hStr}:${mStr}`}
-        </span>
-        <span style={{ fontSize:12, color:"rgba(255,255,255,0.5)", fontFamily:"'DM Sans',sans-serif", marginTop:4 }}>
-          {isTimer ? (mode === "short" ? "Short Timer" : "Timer") : clock.ampm}
-        </span>
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <FlipCard value={left}  size={cardSize} ampm={!isTimer ? clock.ampm : null}/>
+          <FlipCard value={right} size={cardSize}/>
+        </div>
+        {isTimer && (
+          <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)", fontFamily:"'Outfit','DM Sans',sans-serif", letterSpacing:"0.10em", textTransform:"uppercase" }}>
+            {mode === "short" ? "Short Timer" : "Timer"}
+          </span>
+        )}
       </div>
     );
   };
@@ -156,8 +149,6 @@ export default function WidgetApp() {
     <div
       ref={dragRef}
       onMouseDown={onMouseDown}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
       style={{
         width:"100vw", height:"100vh", borderRadius:18, overflow:"hidden",
         border:"1px solid rgba(255,255,255,0.12)",
@@ -206,23 +197,12 @@ export default function WidgetApp() {
         </svg>
       </button>
 
-      {/* Close */}
-      <button onClick={() => window.electron?.unwidget?.()} title="Close widget"
+      {/* Close — quits entire app */}
+      <button onClick={() => window.electron?.quit?.()} title="Quit app"
         style={{ position:"absolute", top:8, right:8, width:22, height:22, zIndex:10,
           borderRadius:"50%", border:"none", cursor:"pointer",
-          background:"rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.6)",
+          background:"rgba(255,80,80,0.25)", color:"rgba(255,255,255,0.8)",
           display:"flex", alignItems:"center", justifyContent:"center", fontSize:12 }}>✕</button>
-
-      {/* Style dots */}
-      <div style={{ position:"absolute", bottom:8, left:"50%", transform:"translateX(-50%)", display:"flex", gap:4, zIndex:10 }}>
-        {[0,1].map(i => (
-          <div key={i} onClick={() => setStyle(i)} style={{
-            width: i === style ? 14 : 5, height:5, borderRadius:3,
-            background: i === style ? "#f0ede8" : "rgba(255,255,255,0.3)",
-            transition:"all 0.3s", cursor:"pointer",
-          }}/>
-        ))}
-      </div>
 
       {/* Clock */}
       <div style={{ position:"relative", zIndex:10 }}>

@@ -136,6 +136,13 @@ ipcMain.on("window-unwidget", () => {
   if (mainWin) mainWin.show();
 });
 
+// Quit entire app — triggered by widget close button
+ipcMain.on("window-quit", () => {
+  if (widgetWin) { widgetWin.destroy(); widgetWin = null; }
+  if (mainWin)  { mainWin.destroy();  mainWin  = null; }
+  app.quit();
+});
+
 // Widget dragging
 ipcMain.on("widget-drag", (_, { dx, dy }) => {
   if (!widgetWin) return;
